@@ -1,0 +1,18 @@
+# --- Wally -------------------------------------------------------------------
+# Packages/ is regenerable with `wally install`. The buildable dependency source
+# is vendor/Knit-1.7.0.rbxm, which IS committed.
+Packages/
+
+# --- Rojo build output -------------------------------------------------------
+# build/deep-tide.rbxlx is committed on purpose (the owner opens it directly).
+build/*.rbxl
+build/*.rbxm
+*.rbxl.lock
+
+# --- Editor / OS -------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

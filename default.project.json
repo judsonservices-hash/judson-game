@@ -1,0 +1,109 @@
+{
+  "name": "Deep Tide",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Packages": {
+        "$path": "vendor/Knit-1.7.0.rbxm"
+      },
+      "DeepTide": {
+        "$path": "src/shared"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "DeepTide": {
+        "$path": "src/server"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "DeepTide": {
+        "$className": "Folder",
+        "Dens": {
+          "$className": "Folder"
+        }
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "DeepTide": {
+          "$path": "src/client"
+        }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "DeepTide": {
+        "$className": "Folder",
+        "World": {
+          "$className": "Folder",
+          "Shallows": {
+            "$className": "Folder"
+          },
+          "Rim": {
+            "$className": "Folder"
+          },
+          "Shelf": {
+            "$className": "Folder"
+          }
+        },
+        "Water": {
+          "$className": "Folder"
+        },
+        "Fish": {
+          "$className": "Folder"
+        },
+        "Spawns": {
+          "$className": "Folder",
+          "SpawnLocation": {
+            "$className": "SpawnLocation",
+            "$properties": {
+              "Size": [
+                12,
+                1,
+                12
+              ],
+              "Position": [
+                0,
+                7.5,
+                -20
+              ],
+              "Anchored": true,
+              "CanCollide": true,
+              "Neutral": true,
+              "Duration": 0,
+              "Material": "Wood",
+              "Color": [
+                122,
+                88,
+                62
+              ]
+            }
+          }
+        }
+      }
+    },
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "ClockTime": 17.5
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.38,
+          "Haze": 1.8,
+          "Color": [
+            72,
+            96,
+            110
+          ]
+        }
+      }
+    }
+  }
+}
