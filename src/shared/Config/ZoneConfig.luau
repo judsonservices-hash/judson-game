@@ -38,6 +38,39 @@ ZoneConfig.DepthBand = {
     Shelf = { top = -100, bottom = -215 },
 }
 
+-- Seabed / base geology (§3.1 "Seabed" row of the volume summary). Parts are laid on a
+-- column x row grid inside the zone footprint; `topY` is the surface the player swims over,
+-- so a cell's centre is topY - thickness/2. WorldService builds exactly these cells.
+ZoneConfig.Seabed = {
+    Shallows = {
+        parts = 24, -- §3.1: "24 sand Parts (80 x 4 x 75, grid 5 x 4) ... tops at Y -45"
+        grid = { columns = 5, rows = 4 },
+        cellSize = Vector3.new(80, 4, 75),
+        topY = -45,
+        -- §3.1: "sloping to -85 in a trench at the SE corner". The SE cell is replaced by
+        -- `trenchSteps` descending sand slabs, so grid + trench still totals 24 parts.
+        trenchCell = { column = 5, row = 4 },
+        trenchTopY = -85,
+        trenchSteps = 5,
+        trenchSize = Vector3.new(70, 4, 60),
+        material = Enum.Material.SmoothPlastic,
+        color = Color3.fromRGB(196, 183, 148),
+    },
+    Shelf = {
+        parts = 20, -- §3.1: "20 rock Parts, sloping from Y -150 at the lip down to -215"
+        grid = { columns = 5, rows = 4 },
+        cellSize = Vector3.new(80, 4, 75),
+        topYs = { -150, -172, -194, -215 }, -- one per row, south (lip) -> north
+        -- §3.1: "split by a central chasm" (ZoneConfig.Chasm). Those cells are not built;
+        -- `aprons` rock slabs close the chasm's north and south ends instead, keeping 20.
+        chasmSkipColumn = 3,
+        chasmSkipRows = { 2, 3 },
+        aprons = 2,
+        material = Enum.Material.Slate,
+        color = Color3.fromRGB(58, 66, 74),
+    },
+}
+
 -- The two playable areas (§3.1).
 ZoneConfig.Zones = {
     Shallows = {
@@ -123,7 +156,9 @@ ZoneConfig.InteractionPoints = {
     RodRack = Vector3.new(12, 9, -10), -- "E — Take Rusty Rod"
     TideTrader = Vector3.new(-14, 9, -10), -- "E — Trade"
     -- DiveMarker: GDD §1 step 3 references a "DIVE HERE" marker but §3.2 gives no coordinate.
-    -- The dock ramp meets the water at Z 8 (§3.2 L1); the blockout places the marker there.
+    -- The dock ramp meets the water at Z 8 (§3.2 L1), so the marker floats just above the
+    -- ramp's water entry there (lead decision, 2026-10-13).
+    DiveMarker = Vector3.new(0, 2.5, 8),
 }
 
 return ZoneConfig

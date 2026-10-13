@@ -58,32 +58,7 @@
           "$className": "Folder"
         },
         "Spawns": {
-          "$className": "Folder",
-          "SpawnLocation": {
-            "$className": "SpawnLocation",
-            "$properties": {
-              "Size": [
-                12,
-                1,
-                12
-              ],
-              "Position": [
-                0,
-                7.5,
-                -20
-              ],
-              "Anchored": true,
-              "CanCollide": true,
-              "Neutral": true,
-              "Duration": 0,
-              "Material": "Wood",
-              "Color": [
-                122,
-                88,
-                62
-              ]
-            }
-          }
+          "$className": "Folder"
         }
       }
     },

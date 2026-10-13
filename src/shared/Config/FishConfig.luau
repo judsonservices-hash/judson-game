@@ -21,8 +21,10 @@ local FishConfig = {}
 -- Species ids in GDD table order (§4.2 rows 1-5).
 FishConfig.Order = { "SilverSardine", "SunsetGrouper", "ReefBass", "LanternEel", "GhostRay" }
 
--- Sum of liveAtStart below (§4.5, Appendix C).
-FishConfig.TotalLiveAtServerStart = 79
+-- Sum of liveAtStart below (§4.5, Appendix C: 48 + 10 + 6 + 7 + 3 = 74).
+-- (Was recorded as 79, which is the arithmetic slip in the GDD's own §4.5 line: 48+10+6+7+3 = 74,
+--  and 74 fish + 7 Lantern Eel lures = the 81 fish Parts Appendix A quotes.)
+FishConfig.TotalLiveAtServerStart = 74
 
 -- Rules that apply to every species (§4.5).
 FishConfig.SpawnRules = {

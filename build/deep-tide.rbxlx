@@ -279,8 +279,10 @@ local FishConfig = {}
 -- Species ids in GDD table order (§4.2 rows 1-5).
 FishConfig.Order = { "SilverSardine", "SunsetGrouper", "ReefBass", "LanternEel", "GhostRay" }
 
--- Sum of liveAtStart below (§4.5, Appendix C).
-FishConfig.TotalLiveAtServerStart = 79
+-- Sum of liveAtStart below (§4.5, Appendix C: 48 + 10 + 6 + 7 + 3 = 74).
+-- (Was recorded as 79, which is the arithmetic slip in the GDD's own §4.5 line: 48+10+6+7+3 = 74,
+--  and 74 fish + 7 Lantern Eel lures = the 81 fish Parts Appendix A quotes.)
+FishConfig.TotalLiveAtServerStart = 74
 
 -- Rules that apply to every species (§4.5).
 FishConfig.SpawnRules = {
@@ -548,67 +550,120 @@ return GearConfig
             <string name="Name">LandmarkConfig</string>
             <string name="Source"><![CDATA[--!strict
 --[[
-	Deep Tide — LandmarkConfig
-	Source: GDD §3.2 (The Shallows, L1-L9), §3.3 (The Rim, R1-R3), §3.4 (The Shelf, S1-S6),
-	        Appendix A (naming rule: every landmark part is named "<ID>_<Piece>").
-	PURE DATA — anchor positions and part counts for the blockout builder and WorldService.
+    Deep Tide — LandmarkConfig
+    Source: GDD §3.2 (The Shallows, L1-L9), §3.3 (The Rim, R1-R3), §3.4 (The Shelf, S1-S6),
+            Appendix A (naming rule: every landmark part is named "<ID>_<Piece>").
+    PURE DATA — anchor positions and part counts for the blockout builder and WorldService.
 
-	Deviation note: this file is not named in Appendix A/B. It exists so landmark
-	coordinates live as data instead of being re-typed from the GDD by every implementer.
+    Deviation note: this file is not named in Appendix A/B. It exists so landmark
+    coordinates live as data instead of being re-typed from the GDD by every implementer.
 
-	`position` is only set where the GDD prints an explicit (X, Y, Z). Where the GDD
-	defines a landmark as a volume instead, `position` is nil and `regionRef` names the
-	table that holds its extents (numbers are never repeated across config files).
-	Eel den coordinates live in SpawnConfig (§4.6).
+    `position` is only set where the GDD prints an explicit (X, Y, Z). Where the GDD
+    defines a landmark as a volume instead, `position` is nil and `regionRef` names the
+    table that holds its extents (numbers are never repeated across config files).
+    Eel den coordinates live in SpawnConfig (§4.6).
 
-	Part-count note: the counts listed in §3.2/§3.3/§3.4 sum to 226 (Shallows 102, Rim 54,
-	Shelf 70) while Appendix A quotes "~280 Parts". The GDD disagrees with itself here;
-	the per-landmark counts are used, and the total is flagged to the lead.
+    Part-count note: the counts listed in §3.2/§3.3/§3.4 sum to 226 (Shallows 102, Rim 54,
+    Shelf 70). Appendix A's "~280 Parts" is the *world* total, not a landmark total: 226
+    landmarks + 44 seabed (§3.1: 24 sand + 20 rock) + 8 world props/anchors = 278.
+    The per-landmark counts are authoritative and PartBudget below is the measured build
+    target; WorldService asserts its built geometry against it and warns on any mismatch.
 ]]
 
 local LandmarkConfig = {}
 
--- Appendix A's stated total. See the part-count note above.
+-- Appendix A's original estimate, kept so the GDD's own disagreement stays visible in code.
 LandmarkConfig.TotalWorldPartsPerAppendixA = 280
 LandmarkConfig.SumOfLandmarkPartCounts = 226
 
+-- What the blockout actually builds (measured from WorldService:GetLayout, 2026-10-13).
+-- Landmarks + Seabed + WorldProps + SpawnAnchorHosts must equal World.
+LandmarkConfig.PartBudget = {
+    Landmarks = 226, -- §3.2-§3.4 per-landmark counts (includes the 4 L1 props that live in Spawns)
+    Seabed = 44, -- §3.1: 24 sand + 20 rock (ZoneConfig.Seabed)
+    WorldProps = 3, -- SpawnLocation, DiveMarker, WaterRegionMarker
+    SpawnAnchorHosts = 5, -- one invisible anchor host per species (Appendix A: spawn volumes)
+    World = 278,
+    FishLive = 74, -- §4.5: 48 + 10 + 6 + 7 + 3 (the GDD prints that sum as 79; the sum is 74)
+    FishParts = 81, -- Appendix C: one Part per fish, two for the Lantern Eel (7 lures)
+}
+LandmarkConfig.PartBudget.GrandTotal = LandmarkConfig.PartBudget.World + LandmarkConfig.PartBudget.FishParts
+
 LandmarkConfig.Landmarks = {
-	-- THE SHALLOWS (§3.2) ----------------------------------------------------
-	{ id = "L1", name = "Deep Tide Dock", zone = "Shallows", position = Vector3.new(0, 6, -10), parts = 12 },
-	{ id = "L2", name = "Coral Spire", zone = "Shallows", position = Vector3.new(-120, -30, 70), parts = 9 },
-	{ id = "L3", name = "The Trawler (wreck)", zone = "Shallows", position = Vector3.new(140, -58, -60), parts = 12 },
-	{ id = "L4", name = "Kelp Field", zone = "Shallows", position = Vector3.new(-40, -35, -100), parts = 34 },
-	{ id = "L5", name = "The Deep Hole", zone = "Shallows", position = Vector3.new(0, -85, 90), parts = 6 },
-	{ id = "L6", name = "Sand Channels", zone = "Shallows", position = nil, parts = 12 }, -- 12 ridges at Y -44, scattered
-	{ id = "L7", name = "Fish Rock Cluster", zone = "Shallows", position = Vector3.new(-160, -30, 30), parts = 8 },
-	{ id = "L8", name = "Sun Shafts", zone = "Shallows", position = nil, parts = 0 }, -- Y 0 -> -60, Technical Artist
-	{
-		id = "L9",
-		name = "Surface Buoys",
-		zone = "Shallows",
-		position = Vector3.new(0, 1, 120),
-		parts = 9,
-		positions = { Vector3.new(0, 1, 120), Vector3.new(-80, 1, 60), Vector3.new(80, 1, 60) },
-	},
+    -- THE SHALLOWS (§3.2) ----------------------------------------------------
+    { id = "L1", name = "Deep Tide Dock", zone = "Shallows", position = Vector3.new(0, 6, -10), parts = 12 },
+    { id = "L2", name = "Coral Spire", zone = "Shallows", position = Vector3.new(-120, -30, 70), parts = 9 },
+    { id = "L3", name = "The Trawler (wreck)", zone = "Shallows", position = Vector3.new(140, -58, -60), parts = 12 },
+    { id = "L4", name = "Kelp Field", zone = "Shallows", position = Vector3.new(-40, -35, -100), parts = 34 },
+    { id = "L5", name = "The Deep Hole", zone = "Shallows", position = Vector3.new(0, -85, 90), parts = 6 },
+    { id = "L6", name = "Sand Channels", zone = "Shallows", position = nil, parts = 12 }, -- 12 ridges at Y -44, scattered
+    { id = "L7", name = "Fish Rock Cluster", zone = "Shallows", position = Vector3.new(-160, -30, 30), parts = 8 },
+    { id = "L8", name = "Sun Shafts", zone = "Shallows", position = nil, parts = 0 }, -- Y 0 -> -60, Technical Artist
+    {
+        id = "L9",
+        name = "Surface Buoys",
+        zone = "Shallows",
+        position = Vector3.new(0, 1, 120),
+        parts = 9,
+        positions = { Vector3.new(0, 1, 120), Vector3.new(-80, 1, 60), Vector3.new(80, 1, 60) },
+    },
 
-	-- THE RIM (§3.3) ---------------------------------------------------------
-	{ id = "R1", name = "Rim Wall", zone = "Rim", position = nil, parts = 40, regionRef = "ZoneConfig.Rim.wall" },
-	{ id = "R2", name = "The Rim Gate (notch)", zone = "Rim", position = nil, parts = 8, regionRef = "ZoneConfig.Rim.gate" },
-	{ id = "R3", name = "Rim Current", zone = "Rim", position = nil, parts = 6, regionRef = "ZoneConfig.Rim.current" },
+    -- THE RIM (§3.3) ---------------------------------------------------------
+    { id = "R1", name = "Rim Wall", zone = "Rim", position = nil, parts = 40, regionRef = "ZoneConfig.Rim.wall" },
+    { id = "R2", name = "The Rim Gate (notch)", zone = "Rim", position = nil, parts = 8, regionRef = "ZoneConfig.Rim.gate" },
+    { id = "R3", name = "Rim Current", zone = "Rim", position = nil, parts = 6, regionRef = "ZoneConfig.Rim.current" },
 
-	-- THE SHELF (§3.4) -------------------------------------------------------
-	{ id = "S1", name = "The Lip", zone = "Shelf", position = Vector3.new(0, -108, 240), parts = 10 },
-	{ id = "S2", name = "Crevice Row (Eel dens)", zone = "Shelf", position = nil, parts = 7 }, -- SpawnConfig.LanternEel.dens
-	{ id = "S3", name = "Ghost Ledge", zone = "Shelf", position = Vector3.new(0, -175, 380), parts = 8 },
-	{ id = "S4", name = "Thermal Vents", zone = "Shelf", position = Vector3.new(110, -205, 440), parts = 14 },
-	{ id = "S5", name = "Sunken Pillars", zone = "Shelf", position = Vector3.new(-130, -165, 330), parts = 9 },
-	{ id = "S6", name = "The Chasm", zone = "Shelf", position = nil, parts = 22, regionRef = "ZoneConfig.Chasm" },
+    -- THE SHELF (§3.4) -------------------------------------------------------
+    { id = "S1", name = "The Lip", zone = "Shelf", position = Vector3.new(0, -108, 240), parts = 10 },
+    { id = "S2", name = "Crevice Row (Eel dens)", zone = "Shelf", position = nil, parts = 7 }, -- SpawnConfig.LanternEel.dens
+    { id = "S3", name = "Ghost Ledge", zone = "Shelf", position = Vector3.new(0, -175, 380), parts = 8 },
+    { id = "S4", name = "Thermal Vents", zone = "Shelf", position = Vector3.new(110, -205, 440), parts = 14 },
+    { id = "S5", name = "Sunken Pillars", zone = "Shelf", position = Vector3.new(-130, -165, 330), parts = 9 },
+    { id = "S6", name = "The Chasm", zone = "Shelf", position = nil, parts = 22, regionRef = "ZoneConfig.Chasm" },
 }
 
--- Interaction props that host ProximityPrompts (§1 steps 2 and 8, §3.2 L1).
+-- Interaction props that host ProximityPrompts (§1 steps 2, 3 and 8, §3.2 L1).
+-- These four L1 props live in Workspace.DeepTide.Spawns (Appendix A), not in the Shallows
+-- folder, and are 4 of L1's 12 parts. `actionText` is what the prompt shows; Roblox prefixes
+-- the key itself, so §1's "E — Take Rusty Rod" is actionText = "Take Rusty Rod".
 LandmarkConfig.PromptHosts = {
-	{ id = "RodRack", zone = "Shallows", landmark = "L1", position = Vector3.new(12, 9, -10) },
-	{ id = "TideTrader", zone = "Shallows", landmark = "L1", position = Vector3.new(-14, 9, -10) },
+    {
+        id = "RodRack",
+        zone = "Shallows",
+        landmark = "L1",
+        position = Vector3.new(12, 9, -10),
+        objectText = "Rod Rack",
+        actionText = "Take Rusty Rod",
+        holdDuration = 0,
+    },
+    {
+        id = "TideTrader",
+        zone = "Shallows",
+        landmark = "L1",
+        position = Vector3.new(-14, 9, -10),
+        objectText = "Tide Trader",
+        actionText = "Trade",
+        holdDuration = 0,
+    },
+    {
+        id = "DiveMarker",
+        zone = "Shallows",
+        landmark = "L1",
+        -- §3.2 gives the marker no coordinate; the ramp meets the water at Z 8, so the marker
+        -- hangs just above that point (ZoneConfig.InteractionPoints.DiveMarker).
+        position = Vector3.new(0, 2.5, 8),
+        objectText = "Dive Point",
+        actionText = "Dive",
+        holdDuration = 0,
+    },
+}
+
+-- Prompt hosts that are not landmark parts, so the builder counts them separately
+-- (LandmarkConfig.PartBudget.WorldProps). Naming rule Appendix A: "<ID>_<Piece>".
+LandmarkConfig.WorldPropNames = {
+    SpawnLocation = "SpawnLocation",
+    DiveMarker = "DiveMarker",
+    WaterRegionMarker = "WaterRegionMarker",
 }
 
 return LandmarkConfig
@@ -861,6 +916,39 @@ ZoneConfig.DepthBand = {
     Shelf = { top = -100, bottom = -215 },
 }
 
+-- Seabed / base geology (§3.1 "Seabed" row of the volume summary). Parts are laid on a
+-- column x row grid inside the zone footprint; `topY` is the surface the player swims over,
+-- so a cell's centre is topY - thickness/2. WorldService builds exactly these cells.
+ZoneConfig.Seabed = {
+    Shallows = {
+        parts = 24, -- §3.1: "24 sand Parts (80 x 4 x 75, grid 5 x 4) ... tops at Y -45"
+        grid = { columns = 5, rows = 4 },
+        cellSize = Vector3.new(80, 4, 75),
+        topY = -45,
+        -- §3.1: "sloping to -85 in a trench at the SE corner". The SE cell is replaced by
+        -- `trenchSteps` descending sand slabs, so grid + trench still totals 24 parts.
+        trenchCell = { column = 5, row = 4 },
+        trenchTopY = -85,
+        trenchSteps = 5,
+        trenchSize = Vector3.new(70, 4, 60),
+        material = Enum.Material.SmoothPlastic,
+        color = Color3.fromRGB(196, 183, 148),
+    },
+    Shelf = {
+        parts = 20, -- §3.1: "20 rock Parts, sloping from Y -150 at the lip down to -215"
+        grid = { columns = 5, rows = 4 },
+        cellSize = Vector3.new(80, 4, 75),
+        topYs = { -150, -172, -194, -215 }, -- one per row, south (lip) -> north
+        -- §3.1: "split by a central chasm" (ZoneConfig.Chasm). Those cells are not built;
+        -- `aprons` rock slabs close the chasm's north and south ends instead, keeping 20.
+        chasmSkipColumn = 3,
+        chasmSkipRows = { 2, 3 },
+        aprons = 2,
+        material = Enum.Material.Slate,
+        color = Color3.fromRGB(58, 66, 74),
+    },
+}
+
 -- The two playable areas (§3.1).
 ZoneConfig.Zones = {
     Shallows = {
@@ -946,7 +1034,9 @@ ZoneConfig.InteractionPoints = {
     RodRack = Vector3.new(12, 9, -10), -- "E — Take Rusty Rod"
     TideTrader = Vector3.new(-14, 9, -10), -- "E — Trade"
     -- DiveMarker: GDD §1 step 3 references a "DIVE HERE" marker but §3.2 gives no coordinate.
-    -- The dock ramp meets the water at Z 8 (§3.2 L1); the blockout places the marker there.
+    -- The dock ramp meets the water at Z 8 (§3.2 L1), so the marker floats just above the
+    -- ramp's water entry there (lead decision, 2026-10-13).
+    DiveMarker = Vector3.new(0, 2.5, 8),
 }
 
 return ZoneConfig
@@ -963,13 +1053,13 @@ return ZoneConfig
             <string name="Name">ConfigCheck</string>
             <string name="Source"><![CDATA[--!strict
 --[[
-	Deep Tide — ConfigCheck
-	Source: GDD §4 (fish), §5.5 (fight times), §5.4 (rod wall), §6.2/§6.4 (economy maths),
-	        §11 (acceptance criteria the numbers must satisfy).
+    Deep Tide — ConfigCheck
+    Source: GDD §4 (fish), §5.5 (fight times), §5.4 (rod wall), §6.2/§6.4 (economy maths),
+            §11 (acceptance criteria the numbers must satisfy).
 
-	Not gameplay logic: a consistency check over the data layer. It runs once at server
-	boot and reports, it never repairs. If a config edit breaks a GDD relationship, this
-	is what tells you — instead of a playtest five minutes later.
+    Not gameplay logic: a consistency check over the data layer. It runs once at server
+    boot and reports, it never repairs. If a config edit breaks a GDD relationship, this
+    is what tells you — instead of a playtest five minutes later.
 ]]
 
 local Configs = require(script.Parent.Configs)
@@ -981,193 +1071,240 @@ local FIGHT_TIME_TOLERANCE = 0.2
 local COINS_PER_SECOND_TOLERANCE = 0.05
 
 export type Report = {
-	ok: boolean,
-	problems: { string },
+    ok: boolean,
+    problems: { string },
 }
 
 local ConfigCheck = {}
 
 function ConfigCheck.run(): Report
-	local problems: { string } = {}
+    local problems: { string } = {}
 
-	local function check(ok: boolean, message: string)
-		if not ok then
-			table.insert(problems, message)
-		end
-	end
+    local function check(ok: boolean, message: string)
+        if not ok then
+            table.insert(problems, message)
+        end
+    end
 
-	local Fish, Spawn, Landmark = Configs.Fish, Configs.Spawn, Configs.Landmark
-	local Rarity, Rod, Gear = Configs.Rarity, Configs.Rod, Configs.Gear
-	local Economy, Zone = Configs.Economy, Configs.Zone
+    local Fish, Spawn, Landmark = Configs.Fish, Configs.Spawn, Configs.Landmark
+    local Rarity, Rod, Gear = Configs.Rarity, Configs.Rod, Configs.Gear
+    local Economy, Zone = Configs.Economy, Configs.Zone
 
-	local nodeCounts: { [string]: number } = {
-		SilverSardine = #Spawn.SilverSardine.anchors,
-		SunsetGrouper = #Spawn.SunsetGrouper.nodes,
-		ReefBass = #Spawn.ReefBass.nodes,
-		LanternEel = #Spawn.LanternEel.dens,
-		GhostRay = #Spawn.GhostRay.nodes,
-	}
+    local nodeCounts: { [string]: number } = {
+        SilverSardine = #Spawn.SilverSardine.anchors,
+        SunsetGrouper = #Spawn.SunsetGrouper.nodes,
+        ReefBass = #Spawn.ReefBass.nodes,
+        LanternEel = #Spawn.LanternEel.dens,
+        GhostRay = #Spawn.GhostRay.nodes,
+    }
 
-	local liveTotal = 0
-	local fishParts = 0
-	local worldParts = 0
+    local liveTotal = 0
+    local fishParts = 0
+    local worldParts = 0
 
-	for _, landmark in Landmark.Landmarks do
-		worldParts += landmark.parts
-	end
-	check(
-		worldParts == Landmark.SumOfLandmarkPartCounts,
-		("landmark part counts sum to %d, not the recorded %d"):format(worldParts, Landmark.SumOfLandmarkPartCounts)
-	)
+    for _, landmark in Landmark.Landmarks do
+        worldParts += landmark.parts
+    end
+    check(
+        worldParts == Landmark.SumOfLandmarkPartCounts,
+        ("landmark part counts sum to %d, not the recorded %d"):format(worldParts, Landmark.SumOfLandmarkPartCounts)
+    )
 
-	for _, id in Fish.Order do
-		local fish = Fish.Species[id]
-		check(fish ~= nil, ("FishConfig.Species.%s is missing but is listed in FishConfig.Order"):format(id))
-		if fish ~= nil then
-			liveTotal += fish.liveAtStart
-			fishParts += fish.liveAtStart * fish.parts
+    -- §3.1 / Appendix A: the world part budget has to add up, and the seabed has to match the
+    -- grids WorldService builds from it, or the built place and the design document drift apart.
+    local budget = Landmark.PartBudget
+    check(
+        budget.Landmarks + budget.Seabed + budget.WorldProps + budget.SpawnAnchorHosts == budget.World,
+        ("PartBudget does not add up: %d + %d + %d + %d ~= %d"):format(
+            budget.Landmarks,
+            budget.Seabed,
+            budget.WorldProps,
+            budget.SpawnAnchorHosts,
+            budget.World
+        )
+    )
+    check(
+        budget.World + budget.FishParts == budget.GrandTotal,
+        ("GrandTotal %d is not World %d + FishParts %d"):format(budget.GrandTotal, budget.World, budget.FishParts)
+    )
+    local shallowsSeabed = Zone.Seabed.Shallows
+    local shallowsCells = shallowsSeabed.grid.columns * shallowsSeabed.grid.rows
+    check(
+        shallowsCells - 1 + shallowsSeabed.trenchSteps == shallowsSeabed.parts,
+        ("Shallows seabed grid (%dx%d - 1 trench cell + %d steps) is not %d parts"):format(
+            shallowsSeabed.grid.columns,
+            shallowsSeabed.grid.rows,
+            shallowsSeabed.trenchSteps,
+            shallowsSeabed.parts
+        )
+    )
+    local shelfSeabed = Zone.Seabed.Shelf
+    local shelfCells = shelfSeabed.grid.columns * shelfSeabed.grid.rows
+    check(
+        shelfCells - #shelfSeabed.chasmSkipRows + shelfSeabed.aprons == shelfSeabed.parts,
+        ("Shelf seabed grid (%dx%d - %d chasm cells + %d aprons) is not %d parts"):format(
+            shelfSeabed.grid.columns,
+            shelfSeabed.grid.rows,
+            #shelfSeabed.chasmSkipRows,
+            shelfSeabed.aprons,
+            shelfSeabed.parts
+        )
+    )
 
-			-- §4.1 / §5.5: the species' hook-set window must equal its rarity's.
-			check(
-				Rarity.HookSetWindow[fish.rarity] == fish.mini.hookWindow,
-				("%s: hookWindow %s does not match RarityConfig.HookSetWindow.%s (%s)"):format(
-					id, tostring(fish.mini.hookWindow), fish.rarity, tostring(Rarity.HookSetWindow[fish.rarity])
-				)
-			)
+    for _, id in Fish.Order do
+        local fish = Fish.Species[id]
+        check(fish ~= nil, ("FishConfig.Species.%s is missing but is listed in FishConfig.Order"):format(id))
+        if fish ~= nil then
+            liveTotal += fish.liveAtStart
+            fishParts += fish.liveAtStart * fish.parts
 
-			-- §4.1: the value must sit inside its rarity's sell band.
-			local band = Rarity.SellValueBand[fish.rarity]
-			check(
-				band ~= nil and fish.value >= band[1] and fish.value <= band[2],
-				("%s: value %d is outside the %s band %s-%s"):format(id, fish.value, fish.rarity, tostring(band and band[1]), tostring(band and band[2]))
-			)
+            -- §4.1 / §5.5: the species' hook-set window must equal its rarity's.
+            check(
+                Rarity.HookSetWindow[fish.rarity] == fish.mini.hookWindow,
+                ("%s: hookWindow %s does not match RarityConfig.HookSetWindow.%s (%s)"):format(
+                    id, tostring(fish.mini.hookWindow), fish.rarity, tostring(Rarity.HookSetWindow[fish.rarity])
+                )
+            )
 
-			-- §6.2: the economy table must quote the same price as the fish table.
-			check(
-				Economy.SellValues[id] == fish.value,
-				("%s: EconomyConfig.SellValues is %s but FishConfig value is %d"):format(id, tostring(Economy.SellValues[id]), fish.value)
-			)
+            -- §4.1: the value must sit inside its rarity's sell band.
+            local band = Rarity.SellValueBand[fish.rarity]
+            check(
+                band ~= nil and fish.value >= band[1] and fish.value <= band[2],
+                ("%s: value %d is outside the %s band %s-%s"):format(id, fish.value, fish.rarity, tostring(band and band[1]), tostring(band and band[2]))
+            )
 
-			-- §4.5: one node/den/anchor per instance of the species.
-			check(
-				nodeCounts[id] == fish.behaviourCfg.count,
-				("%s: %d spawn nodes in SpawnConfig but behaviourCfg.count is %s"):format(id, nodeCounts[id], tostring(fish.behaviourCfg.count))
-			)
-			if fish.behaviour == "School" then
-				check(
-					fish.behaviourCfg.count * fish.behaviourCfg.perSchool == fish.liveAtStart,
-					("%s: liveAtStart %d != schools x perSchool"):format(id, fish.liveAtStart)
-				)
-			else
-				check(
-					fish.behaviourCfg.count == fish.liveAtStart,
-					("%s: liveAtStart %d != behaviourCfg.count %s"):format(id, fish.liveAtStart, tostring(fish.behaviourCfg.count))
-				)
-			end
+            -- §6.2: the economy table must quote the same price as the fish table.
+            check(
+                Economy.SellValues[id] == fish.value,
+                ("%s: EconomyConfig.SellValues is %s but FishConfig value is %d"):format(id, tostring(Economy.SellValues[id]), fish.value)
+            )
 
-			-- §5.5 / §6.2: fight length and Coins-per-second must still agree.
-			local ideal = 100 / fish.mini.fillRate
-			local real = Economy.FightTimeSeconds[id]
-			check(
-				real ~= nil and math.abs(real - REAL_PLAY_FACTOR * ideal) <= FIGHT_TIME_TOLERANCE,
-				("%s: FightTimeSeconds %s is not ~%.1fx the %.1fs perfect-play fight"):format(id, tostring(real), REAL_PLAY_FACTOR, ideal)
-			)
-			if real ~= nil and real > 0 then
-				local computed = math.floor((fish.value / real) * 10 + 0.5) / 10
-				check(
-					math.abs(Economy.CoinsPerSecondOfFight[id] - computed) <= COINS_PER_SECOND_TOLERANCE,
-					("%s: CoinsPerSecondOfFight %s != value/fightTime %.1f"):format(id, tostring(Economy.CoinsPerSecondOfFight[id]), computed)
-				)
-			end
+            -- §4.5: one node/den/anchor per instance of the species.
+            check(
+                nodeCounts[id] == fish.behaviourCfg.count,
+                ("%s: %d spawn nodes in SpawnConfig but behaviourCfg.count is %s"):format(id, nodeCounts[id], tostring(fish.behaviourCfg.count))
+            )
+            if fish.behaviour == "School" then
+                check(
+                    fish.behaviourCfg.count * fish.behaviourCfg.perSchool == fish.liveAtStart,
+                    ("%s: liveAtStart %d != schools x perSchool"):format(id, fish.liveAtStart)
+                )
+            else
+                check(
+                    fish.behaviourCfg.count == fish.liveAtStart,
+                    ("%s: liveAtStart %d != behaviourCfg.count %s"):format(id, fish.liveAtStart, tostring(fish.behaviourCfg.count))
+                )
+            end
 
-			-- §3.1 / §4.5: the species must live inside its zone's band, and never
-			-- shallower than the shelf rule allows.
-			local zone = Zone.Zones[fish.zone]
-			check(zone ~= nil, ("%s: zone '%s' is not in ZoneConfig.Zones"):format(id, tostring(fish.zone)))
-			if zone ~= nil then
-				local deepest = -zone.depthBand.bottom
-				check(
-					fish.depthBand[1] >= 0 and fish.depthBand[2] <= deepest,
-					("%s: depthBand %d-%d does not fit %s (0-%d studs)"):format(id, fish.depthBand[1], fish.depthBand[2], fish.zone, deepest)
-				)
-			end
-			if fish.zone == "Shelf" then
-				check(
-					fish.depthBand[1] >= Fish.SpawnRules.NeverShallowerThanStuds,
-					("%s: no Shelf fish may be found shallower than %d studs"):format(id, Fish.SpawnRules.NeverShallowerThanStuds)
-				)
-			end
-		end
-	end
+            -- §5.5 / §6.2: fight length and Coins-per-second must still agree.
+            local ideal = 100 / fish.mini.fillRate
+            local real = Economy.FightTimeSeconds[id]
+            check(
+                real ~= nil and math.abs(real - REAL_PLAY_FACTOR * ideal) <= FIGHT_TIME_TOLERANCE,
+                ("%s: FightTimeSeconds %s is not ~%.1fx the %.1fs perfect-play fight"):format(id, tostring(real), REAL_PLAY_FACTOR, ideal)
+            )
+            if real ~= nil and real > 0 then
+                local computed = math.floor((fish.value / real) * 10 + 0.5) / 10
+                check(
+                    math.abs(Economy.CoinsPerSecondOfFight[id] - computed) <= COINS_PER_SECOND_TOLERANCE,
+                    ("%s: CoinsPerSecondOfFight %s != value/fightTime %.1f"):format(id, tostring(Economy.CoinsPerSecondOfFight[id]), computed)
+                )
+            end
 
-	-- §4.5 / Appendix C: 48 + 10 + 6 + 7 + 3 = 79 live at server start.
-	check(
-		liveTotal == Fish.TotalLiveAtServerStart,
-		("live fish sum to %d, FishConfig.TotalLiveAtServerStart records %d"):format(liveTotal, Fish.TotalLiveAtServerStart)
-	)
-	check(liveTotal == 79, ("live fish sum to %d, the GDD's 48/10/6/7/3 is 79"):format(liveTotal))
+            -- §3.1 / §4.5: the species must live inside its zone's band, and never
+            -- shallower than the shelf rule allows.
+            local zone = Zone.Zones[fish.zone]
+            check(zone ~= nil, ("%s: zone '%s' is not in ZoneConfig.Zones"):format(id, tostring(fish.zone)))
+            if zone ~= nil then
+                local deepest = -zone.depthBand.bottom
+                check(
+                    fish.depthBand[1] >= 0 and fish.depthBand[2] <= deepest,
+                    ("%s: depthBand %d-%d does not fit %s (0-%d studs)"):format(id, fish.depthBand[1], fish.depthBand[2], fish.zone, deepest)
+                )
+            end
+            if fish.zone == "Shelf" then
+                check(
+                    fish.depthBand[1] >= Fish.SpawnRules.NeverShallowerThanStuds,
+                    ("%s: no Shelf fish may be found shallower than %d studs"):format(id, Fish.SpawnRules.NeverShallowerThanStuds)
+                )
+            end
+        end
+    end
 
-	-- §3.1: each zone's gear gate must be met by the gear that unlocks it.
-	check(
-		Gear.Gear.RubberLungs.depthRating >= Zone.Zones.Shallows.requiredDepthRating,
-		"Rubber Lungs cannot reach the Shallows requirement"
-	)
-	check(
-		Gear.Gear.ReinforcedTank.depthRating >= Zone.Zones.Shelf.requiredDepthRating,
-		"Reinforced Tank cannot reach The Shelf requirement"
-	)
+    -- §4.5 / Appendix C: 48 + 10 + 6 + 7 + 3 = 74 live at server start.
+    check(
+        liveTotal == Fish.TotalLiveAtServerStart,
+        ("live fish sum to %d, FishConfig.TotalLiveAtServerStart records %d"):format(liveTotal, Fish.TotalLiveAtServerStart)
+    )
+    check(liveTotal == 74, ("live fish sum to %d, the GDD's 48/10/6/7/3 is 74"):format(liveTotal))
 
-	-- §6.3: shop prices must match the gear/rod tables the shop sells.
-	check(
-		Gear.Gear.ReinforcedTank.cost == Economy.Shop.ReinforcedTank.cost,
-		"Reinforced Tank cost differs between GearConfig and EconomyConfig.Shop"
-	)
-	check(Rod.Rods.BrassRod.cost == Economy.Shop.BrassRod.cost, "Brass Rod cost differs between RodConfig and EconomyConfig.Shop")
-	check(Economy.ShopOrder[1] == "ReinforcedTank", "§6.3: the Reinforced Tank must be listed first")
+    -- §3.1: each zone's gear gate must be met by the gear that unlocks it.
+    check(
+        Gear.Gear.RubberLungs.depthRating >= Zone.Zones.Shallows.requiredDepthRating,
+        "Rubber Lungs cannot reach the Shallows requirement"
+    )
+    check(
+        Gear.Gear.ReinforcedTank.depthRating >= Zone.Zones.Shelf.requiredDepthRating,
+        "Reinforced Tank cannot reach The Shelf requirement"
+    )
 
-	-- §5.4: the rod wall. A Rusty Rod must never be able to land an Epic fish, and the
-	-- Brass Rod must be the item that removes that wall (§6.3).
-	check(
-		Rarity.Rank[Rod.Rods.RustyRod.maxRarity] < Rarity.Rank[Fish.Species.GhostRay.rarity],
-		"§5.4: Rusty Rod's maxRarity now allows an Epic fish — the designed wall is broken"
-	)
-	check(
-		Rarity.Rank[Rod.Rods.BrassRod.maxRarity] >= Rarity.Rank[Fish.Species.GhostRay.rarity],
-		"§6.3: Brass Rod must reach the Ghost Ray's rarity"
-	)
+    -- §6.3: shop prices must match the gear/rod tables the shop sells.
+    check(
+        Gear.Gear.ReinforcedTank.cost == Economy.Shop.ReinforcedTank.cost,
+        "Reinforced Tank cost differs between GearConfig and EconomyConfig.Shop"
+    )
+    check(Rod.Rods.BrassRod.cost == Economy.Shop.BrassRod.cost, "Brass Rod cost differs between RodConfig and EconomyConfig.Shop")
+    check(Economy.ShopOrder[1] == "ReinforcedTank", "§6.3: the Reinforced Tank must be listed first")
 
-	-- §6.4: the routes to the 280 C tank must still add up, and must still clear it.
-	local tankCost = Economy.Shop.ReinforcedTank.cost
-	local median = Economy.Routes.Median
-	check(median.dive1 + median.dive2 == median.total, "§6.4: the median route totals do not add up")
-	check(
-		median.total >= tankCost,
-		("§6.4: the median 2-dive route (%d C) no longer affords the tank (%d C)"):format(median.total, tankCost)
-	)
-	local minimum = Economy.Routes.MinimumSkill
-	check(
-		minimum.sardines * Economy.SellValues.SilverSardine == minimum.total,
-		"§6.4: the 19-sardine route total no longer matches its arithmetic"
-	)
-	check(
-		minimum.total >= tankCost,
-		("§6.4: the minimum-skill balance floor (%d C) no longer affords the tank (%d C)"):format(minimum.total, tankCost)
-	)
-	local fast = Economy.Routes.Fast
-	check(fast.reefBass * Economy.SellValues.ReefBass == fast.total, "§6.4: the fast route total no longer matches its arithmetic")
+    -- §5.4: the rod wall. A Rusty Rod must never be able to land an Epic fish, and the
+    -- Brass Rod must be the item that removes that wall (§6.3).
+    check(
+        Rarity.Rank[Rod.Rods.RustyRod.maxRarity] < Rarity.Rank[Fish.Species.GhostRay.rarity],
+        "§5.4: Rusty Rod's maxRarity now allows an Epic fish — the designed wall is broken"
+    )
+    check(
+        Rarity.Rank[Rod.Rods.BrassRod.maxRarity] >= Rarity.Rank[Fish.Species.GhostRay.rarity],
+        "§6.3: Brass Rod must reach the Ghost Ray's rarity"
+    )
 
-	return {
-		ok = #problems == 0,
-		problems = problems,
-	}
+    -- §6.4: the routes to the 280 C tank must still add up, and must still clear it.
+    local tankCost = Economy.Shop.ReinforcedTank.cost
+    local median = Economy.Routes.Median
+    check(median.dive1 + median.dive2 == median.total, "§6.4: the median route totals do not add up")
+    check(
+        median.total >= tankCost,
+        ("§6.4: the median 2-dive route (%d C) no longer affords the tank (%d C)"):format(median.total, tankCost)
+    )
+    local minimum = Economy.Routes.MinimumSkill
+    check(
+        minimum.sardines * Economy.SellValues.SilverSardine == minimum.total,
+        "§6.4: the 19-sardine route total no longer matches its arithmetic"
+    )
+    check(
+        minimum.total >= tankCost,
+        ("§6.4: the minimum-skill balance floor (%d C) no longer affords the tank (%d C)"):format(minimum.total, tankCost)
+    )
+    local fast = Economy.Routes.Fast
+    check(fast.reefBass * Economy.SellValues.ReefBass == fast.total, "§6.4: the fast route total no longer matches its arithmetic")
+
+    return {
+        ok = #problems == 0,
+        problems = problems,
+    }
 end
 
 --- Human-readable one-liner for the boot line / Studio output.
 function ConfigCheck.summary(report: Report, speciesCount: number, liveFish: number): string
-	if report.ok then
-		return ("config OK — %d species, %d fish live, %d world parts"):format(speciesCount, liveFish, Configs.Landmark.SumOfLandmarkPartCounts)
-	end
-	return ("config problems: %d"):format(#report.problems)
+    if report.ok then
+        -- The world part count is what the blockout actually builds (LandmarkConfig.PartBudget,
+        -- asserted by WorldService at build time), not the landmark subtotal on its own.
+        return ("config OK — %d species, %d fish live, %d world parts"):format(
+            speciesCount,
+            liveFish,
+            Configs.Landmark.PartBudget.World
+        )
+    end
+    return ("config problems: %d"):format(#report.problems)
 end
 
 return ConfigCheck
@@ -16346,19 +16483,19 @@ end)
             <string name="Name">PlayerStore</string>
             <string name="Source"><![CDATA[--!strict
 --[[
-	Deep Tide — PlayerStore (server-side helper module, NOT a Knit service)
-	Source: GDD §10 ("save persistence ... if a DataStore is added it must be a stub that
-	         cannot fail the loop"), §11 ("no Engine errors or warnings during a full loop").
+    Deep Tide — PlayerStore (server-side helper module, NOT a Knit service)
+    Source: GDD §10 ("save persistence ... if a DataStore is added it must be a stub that
+             cannot fail the loop"), §11 ("no Engine errors or warnings during a full loop").
 
-	The slice's only persistence: a player's Coins and Catch Log.
+    The slice's only persistence: a player's Coins and Catch Log.
 
-	Design rules
-	  * every DataStore call is wrapped in pcall — a persistence failure can never error the loop;
-	  * if Studio API access is unavailable (the default) it degrades to session-only data
-	    and reports the mode instead of throwing;
-	  * to persist in Studio: Game Settings > Security > "Enable Studio Access to API Services".
+    Design rules
+      * every DataStore call is wrapped in pcall — a persistence failure can never error the loop;
+      * if Studio API access is unavailable (the default) it degrades to session-only data
+        and reports the mode instead of throwing;
+      * to persist in Studio: Game Settings > Security > "Enable Studio Access to API Services".
 
-	This module is intentionally outside Services/ so Knit never treats it as a service.
+    This module is intentionally outside Services/ so Knit never treats it as a service.
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -16380,84 +16517,84 @@ PlayerStore.mode = "session-only"
 local store: DataStore? = nil
 
 local function keyFor(player: Player): string
-	return ("player_%d"):format(player.UserId)
+    return ("player_%d"):format(player.UserId)
 end
 
 --- A fresh profile (§6.1: 0 C, Rusty Rod, Rubber Lungs, empty Catch Log).
 function PlayerStore.defaultData(): Types.PlayerData
-	return {
-		schemaVersion = PlayerStore.SchemaVersion,
-		coins = EconomyConfig.StartingCoins,
-		catchLog = {},
-		equippedRodId = EconomyConfig.StartingRodId,
-		equippedGearId = EconomyConfig.StartingGearId,
-	}
+    return {
+        schemaVersion = PlayerStore.SchemaVersion,
+        coins = EconomyConfig.StartingCoins,
+        catchLog = {},
+        equippedRodId = EconomyConfig.StartingRodId,
+        equippedGearId = EconomyConfig.StartingGearId,
+    }
 end
 
 --- Probes DataStore availability once. Never throws; sets PlayerStore.mode.
 function PlayerStore.init(): string
-	local gotStore, result = pcall(function()
-		return DataStoreService:GetDataStore(PlayerStore.StoreName)
-	end)
+    local gotStore, result = pcall(function()
+        return DataStoreService:GetDataStore(PlayerStore.StoreName)
+    end)
 
-	if not gotStore then
-		PlayerStore.mode = "session-only"
-		return PlayerStore.mode
-	end
+    if not gotStore then
+        PlayerStore.mode = "session-only"
+        return PlayerStore.mode
+    end
 
-	store = result
+    store = result
 
-	-- Studio with "Enable Studio Access to API Services" off fails here, which is the
-	-- expected case, not an error.
-	local probed = pcall(function()
-		return (store :: DataStore):GetAsync("__deeptide_probe__")
-	end)
+    -- Studio with "Enable Studio Access to API Services" off fails here, which is the
+    -- expected case, not an error.
+    local probed = pcall(function()
+        return (store :: DataStore):GetAsync("__deeptide_probe__")
+    end)
 
-	PlayerStore.mode = if probed then "DataStore" else "session-only"
-	return PlayerStore.mode
+    PlayerStore.mode = if probed then "DataStore" else "session-only"
+    return PlayerStore.mode
 end
 
 --- Loads coins + catch log for a player.
 --- Returns (persisted, data): `persisted` is false when the session-only fallback is
 --- serving defaults, so callers can tell the difference without handling errors.
 function PlayerStore.load(player: Player): (boolean, Types.PlayerData)
-	local data = PlayerStore.defaultData()
+    local data = PlayerStore.defaultData()
 
-	if store == nil or PlayerStore.mode ~= "DataStore" then
-		return false, data
-	end
+    if store == nil or PlayerStore.mode ~= "DataStore" then
+        return false, data
+    end
 
-	local ok, result = pcall(function()
-		return (store :: DataStore):GetAsync(keyFor(player))
-	end)
+    local ok, result = pcall(function()
+        return (store :: DataStore):GetAsync(keyFor(player))
+    end)
 
-	if not ok or type(result) ~= "table" then
-		return false, data
-	end
+    if not ok or type(result) ~= "table" then
+        return false, data
+    end
 
-	for field, value in data do
-		if result[field] ~= nil then
-			data[field] = value
-		end
-	end
-	data.schemaVersion = PlayerStore.SchemaVersion
-	return true, data
+    for field in data do
+        if result[field] ~= nil then
+            data[field] = result[field]
+        end
+    end
+    data.schemaVersion = PlayerStore.SchemaVersion
+    return true, data
 end
 
 --- Saves coins + catch log. Returns false when there is nothing to save to.
 function PlayerStore.save(player: Player, data: Types.PlayerData): boolean
-	if store == nil or PlayerStore.mode ~= "DataStore" then
-		return false
-	end
+    if store == nil or PlayerStore.mode ~= "DataStore" then
+        return false
+    end
 
-	local ok = pcall(function()
-		(store :: DataStore):SetAsync(keyFor(player), data)
-	end)
+    local ok = pcall(function()
+        (store :: DataStore):SetAsync(keyFor(player), data)
+    end)
 
-	if not ok then
-		warn(("[Deep Tide] PlayerStore: save failed for %s"):format(player.Name))
-	end
-	return ok
+    if not ok then
+        warn(("[Deep Tide] PlayerStore: save failed for %s"):format(player.Name))
+    end
+    return ok
 end
 
 return PlayerStore
@@ -17050,13 +17187,23 @@ return InventoryService
             <string name="Name">PlayerService</string>
             <string name="Source"><![CDATA[--!strict
 --[[
-	PlayerService — Appendix B: "Join/leave, PlayerData bootstrap, placeholder persistence".
-	Source: GDD §6.1 (starting state: 0 C, Rusty Rod, Rubber Lungs, empty Catch Log),
-	        §10 (persistence is a stub that cannot fail the loop).
+    PlayerService — Appendix B: "Join/leave, PlayerData bootstrap, placeholder persistence".
+    Source: GDD §6.1 (starting state: 0 C, Rusty Rod, Rubber Lungs, empty Catch Log),
+            §10 (persistence is a stub that cannot fail the loop).
 
-	Owns the per-player profile and its lifecycle. Coins and the Catch Log live inside
-	the profile; the services that change them (EconomyService, InventoryService) ask
-	this service for it. Skeleton only — TODOs mark where the scripter fills in.
+    Owns the per-player profile and its lifecycle. Coins and the Catch Log live inside
+    the profile; the services that change them (EconomyService, InventoryService) ask
+    this service for it.
+
+    Persistence is wired and cannot fail the loop: every DataStore call inside PlayerStore
+    is pcall'd, and a Studio session without API access degrades to session-only data
+    (PlayerStore.mode) instead of erroring. A profile is loaded on join, saved on leave,
+    and saved once more on shutdown (BindToClose).
+
+    Per-player teardown rule: PlayerService:ReleasePlayer saves the profile, drops it, then
+    calls `ReleasePlayer(player)` on every sibling service that defines it — so any service
+    holding per-player state (a cooldown table, a live fight) drops it by implementing that
+    one method. Nothing else has to know who holds what.
 ]]
 
 local Players = game:GetService("Players")
@@ -17067,7 +17214,7 @@ local Types = require(ReplicatedStorage.DeepTide.Modules.Types)
 local PlayerStore = require(script.Parent.Parent.Modules.PlayerStore)
 
 local PlayerService = Knit.CreateService {
-	Name = "PlayerService",
+    Name = "PlayerService",
 }
 
 local dataByPlayer: { [Player]: Types.PlayerData } = {}
@@ -17076,44 +17223,97 @@ local dataByPlayer: { [Player]: Types.PlayerData } = {}
 
 --- The player's profile, or nil before it is loaded.
 function PlayerService:GetData(player: Player): Types.PlayerData?
-	return dataByPlayer[player]
+    return dataByPlayer[player]
 end
 
 function PlayerService:IsLoaded(player: Player): boolean
-	return dataByPlayer[player] ~= nil
+    return dataByPlayer[player] ~= nil
 end
 
 --- "DataStore" or "session-only" (§10). Surfaced on the boot line.
 function PlayerService:GetPersistenceMode(): string
-	return PlayerStore.mode
+    return PlayerStore.mode
 end
 
+--- §6.1, §10: load the profile (coins + catch log) and publish it. Returns whether real
+--- persistence answered: false means the session-only defaults are in use, which is the
+--- correct starting state anyway (EconomyConfig.StartingCoins / StartingRodId / StartingGearId).
 function PlayerService:LoadPlayer(player: Player): boolean
-	-- TODO(§6.1, §10): PlayerStore.load(player) into dataByPlayer.
-	-- The session-only fallback returns the default profile, which is the correct
-	-- starting state anyway (EconomyConfig.StartingCoins / StartingRodId / StartingGearId).
-	return false
+    local persisted, data = PlayerStore.load(player)
+    dataByPlayer[player] = data
+    return persisted
 end
 
+--- §10: write the profile back. Returns false when nothing was loaded or when there is
+--- no DataStore to write to (session-only), never an error.
 function PlayerService:SavePlayer(player: Player): boolean
-	-- TODO(§10): PlayerStore.save(player, profile) when IsLoaded(player).
-	return false
+    local data = dataByPlayer[player]
+    if data == nil then
+        return false
+    end
+    local ok, saved = pcall(function()
+        return PlayerStore.save(player, data)
+    end)
+    return ok and saved == true
 end
 
+--- Save, drop the profile, and let every sibling service drop its own per-player state.
+--- Called on PlayerRemoving and on shutdown.
 function PlayerService:ReleasePlayer(player: Player)
-	-- TODO: save, drop the profile, and let the other services drop their per-player state.
+    if dataByPlayer[player] ~= nil then
+        self:SavePlayer(player)
+    end
+    dataByPlayer[player] = nil
+
+    for _, module in script.Parent:GetChildren() do
+        if module:IsA("ModuleScript") and module.Name ~= self.Name then
+            local resolved, service = pcall(function()
+                return Knit.GetService(module.Name)
+            end)
+            local release = if resolved and type(service) == "table" then (service :: any).ReleasePlayer else nil
+            if type(release) == "function" then
+                local ok, err = pcall(function()
+                    release(service, player)
+                end)
+                if not ok then
+                    warn(("[Deep Tide] PlayerService: %s.ReleasePlayer failed: %s"):format(module.Name, tostring(err)))
+                end
+            end
+        end
+    end
 end
 
 -- Knit lifecycle --------------------------------------------------------------
 
 function PlayerService:KnitInit()
-	-- Probe persistence once so PlayerStore.mode is known before the boot line prints.
-	PlayerStore.init()
+    -- Probe persistence once so PlayerStore.mode is known before the boot line prints.
+    PlayerStore.init()
 
-	-- TODO(§10): Players.PlayerAdded -> LoadPlayer
-	--             Players.PlayerRemoving -> SavePlayer + ReleasePlayer
-	--             game:BindToClose -> save every loaded player; wrap in pcall so a
-	--             shutdown save failure cannot surface as an error.
+    Players.PlayerAdded:Connect(function(player)
+        self:LoadPlayer(player)
+    end)
+
+    Players.PlayerRemoving:Connect(function(player)
+        self:ReleasePlayer(player)
+    end)
+
+    -- §10: a shutdown save cannot surface as an error. Each save is pcall'd inside
+    -- SavePlayer, and the whole sweep is wrapped too.
+    game:BindToClose(function()
+        pcall(function()
+            for player in dataByPlayer do
+                self:SavePlayer(player)
+            end
+        end)
+    end)
+
+    -- A player can already be in the game when this runs (Studio's local player, or someone
+    -- who joined during the boot): PlayerAdded will not fire for them.
+    for _, player in Players:GetPlayers() do
+        if not self:IsLoaded(player) then
+            self:LoadPlayer(player)
+        end
+    end
 end
 
 function PlayerService:KnitStart() end
@@ -17223,42 +17423,1579 @@ return ShopService
             <string name="Name">WorldService</string>
             <string name="Source"><![CDATA[--!strict
 --[[
-    WorldService — Appendix B: "Builds nothing (world is .rbxmx/Rojo-mapped); owns spawn points,
-    ProximityPrompt wiring, zone-entry banners".
-    Source: GDD §1 steps 1-3 and 8 (spawn, rod rack, dive marker, Tide Trader prompts),
-            §3.1/§3.3 (zone footprints and the Rim Gate), §9 (zone entry banner, world prompts).
+    WorldService — builds the playable world at server start, from config data only.
+    Source: GDD §3.0 (coordinates, water, build zone), §3.1 (volumes + seabed),
+            §3.2 (THE SHALLOWS L1-L9), §3.3 (THE RIM R1-R3), §3.4 (THE SHELF S1-S6),
+            §3.4/§7 (the abyss drop and the threshold read), §4.6 (spawn coordinates),
+            §1 steps 1-3 and 8 (spawn, rod rack, dive marker, Tide Trader), §9 (zone banners),
+            Appendix A (naming rule, folder tree, primitives only).
 
-    This service never creates geometry. It finds the named instances the blockout places
-    (Appendix A naming rule: "<ID>_<Piece>", prompts hosted in Workspace.DeepTide.Spawns) and
-    answers questions about where the player is.
+    Rules this file obeys
+      * Config is the source of truth. Landmark anchors and part counts come from
+        LandmarkConfig, the seabed grids from ZoneConfig.Seabed, the spawn coordinates from
+        SpawnConfig. This file holds only the per-piece *build recipe* (sizes, colours, tilts)
+        that the GDD prints in prose — no gameplay number lives here.
+      * Deterministic. No math.random: every "random" value in the GDD (yaw, tilt, scatter)
+        is a pure hash of the part index, so every server and every re-run builds the same world.
+      * Idempotent. Build() clears Workspace.DeepTide.World, .Water and .Spawns first, so a
+        server restart or a second call rebuilds instead of duplicating. It never touches
+        Workspace.DeepTide.Fish — that folder belongs to FishService.
+      * Anchored. Every part is anchored; nothing here can fall or be pushed.
+      * No fish, no animation, no prompt behaviour: this service creates the spawn *anchors*
+        and the ProximityPrompt *instances*; connecting them to verbs is FishingService /
+        ShopService work (their TODOs).
+      * Nothing is placed outside ZoneConfig.BuildZone (§3.0) except the water volume itself.
+
+    Known GDD deviations, all commented at the point they happen:
+      * §3.2 L1's "-12 deg ramp" (see RAMP_DEGREES) — the angle and the Z 8 water entry cannot
+        both hold; the water entry wins (the DIVE HERE marker sits there).
+      * §3.2 L2's "Cone primitives" and §3.4 S4's cones — Roblox has no cone Part and
+        Appendix A forbids SpecialMesh, so tapered cylinder stacks stand in.
+      * §3.4 S2's "3-stud Neon speck" — S2's budget is 7 (the dens), so the speck is a
+        PointLight on each den instead of an eighth part.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
 local Knit = require(ReplicatedStorage.Packages.Knit)
 
 local ZoneConfig = require(ReplicatedStorage.DeepTide.Config.ZoneConfig)
+local LandmarkConfig = require(ReplicatedStorage.DeepTide.Config.LandmarkConfig)
+local SpawnConfig = require(ReplicatedStorage.DeepTide.Config.SpawnConfig)
 
 local WorldService = Knit.CreateService {
     Name = "WorldService",
     Client = {},
 }
 
--- Public server API -----------------------------------------------------------
+-- ============================================================================
+-- Layout types (see Build() for how a spec becomes an Instance)
+-- ============================================================================
 
---- Which zone a world position sits in ("Shallows" | "Shelf" | nil between them).
+type PartSpec = {
+    name: string,
+    parent: string, -- folder path under Workspace.DeepTide, e.g. "World/Shallows/L1"
+    size: Vector3,
+    cf: CFrame,
+    class: string?,
+    shape: Enum.PartType?,
+    axis: string?, -- "Y" for a standing cylinder, "X" for one lying on its side
+    material: Enum.Material?,
+    color: Color3?,
+    transparency: number?,
+    decor: boolean?, -- decorative: no collide, no query, no shadow
+    collide: boolean?,
+    query: boolean?,
+    outsideBuildZone: boolean?, -- volumes that define space rather than occupy it
+    props: { [string]: any }?, -- extra instance properties (Duration, Neutral, ...)
+    attributes: { [string]: any }?,
+    light: { [string]: any }?, -- PointLight on this part
+    prompt: { [string]: any }?, -- ProximityPrompt on this part (Appendix A prompt host)
+    billboard: { [string]: any }?, -- text sign, e.g. "DIVE HERE" (§1 step 3)
+}
+
+type AnchorSpec = {
+    name: string,
+    host: string, -- name of the invisible host BasePart the Attachment hangs off
+    hostParent: string, -- folder holding that host part
+    position: Vector3, -- relative to the host
+    attributes: { [string]: any },
+}
+
+type Layout = {
+    folders: { string },
+    parts: { PartSpec },
+    anchors: { AnchorSpec },
+    water: { size: Vector3 },
+}
+
+-- ============================================================================
+-- Names and constants (geometry only; every gameplay number lives in Config/)
+-- ============================================================================
+
+local ROOT_NAME = "DeepTide"
+local WORLD_FOLDER = "World"
+local WATER_FOLDER = "Water"
+local SPAWNS_FOLDER = "Spawns"
+
+local GOLDEN_ANGLE = 137.508
+
+-- Palette (§3.2-§3.4 name most of these inline; the rest read off the zone descriptions).
+local DOCK_WOOD = Color3.fromRGB(122, 88, 62)
+local DOCK_WOOD_DARK = Color3.fromRGB(96, 68, 48)
+local SAND = Color3.fromRGB(196, 183, 148)
+local REEF_ROCK = Color3.fromRGB(96, 104, 116)
+local RIM_ROCK = Color3.fromRGB(58, 66, 74) -- §3.3: deliberately desaturated, "not-reef"
+local SHELF_ROCK = Color3.fromRGB(70, 76, 84)
+local SHELF_ROCK_DARK = Color3.fromRGB(44, 52, 62)
+local DEEP_VOID = Color3.fromRGB(8, 10, 14)
+local CORAL_PINK = Color3.fromRGB(214, 96, 120)
+local CORAL_TEAL = Color3.fromRGB(96, 186, 168)
+local KELP_GREEN = Color3.fromRGB(38, 96, 70)
+local WARM_NEON = Color3.fromRGB(255, 214, 140)
+local GATE_NEON = Color3.fromRGB(120, 190, 210)
+local EEL_NEON = Color3.fromRGB(120, 255, 190)
+local VENT_NEON = Color3.fromRGB(255, 132, 60)
+local MINERAL_NEON = Color3.fromRGB(150, 190, 220)
+
+-- The dock ramp. §3.2 L1 prints "ramp 16 x 1 x 30 rotated -12 deg down to water at Z 8",
+-- but the deck's north lip is at Z 5 (deck 30 deep, centred Z -10) and the water is at Y 0,
+-- so a -12 deg ramp cannot reach the water at Z 8 — it would need ~33 studs of Z to fall 7.
+-- The builder keeps the GDD's Z 8 water entry (the lead's DIVE HERE decision) and takes the
+-- only geometry that satisfies it: a steeper dive ramp hanging off the deck lip.
+local RAMP_DEGREES = 62
+local RAMP_LENGTH = 18
+local RAMP_WIDTH = 16
+local DECK_TOP_Y = 7
+local DECK_LIP_Z = 5
+
+-- Per-build state (module locals, so nothing is bolted onto the Knit service table).
+local lastReport: { [string]: any }? = nil
+local promptById: { [string]: ProximityPrompt } = {}
+
+-- ============================================================================
+-- Small pure helpers
+-- ============================================================================
+
+-- Deterministic "random" in [0,1): a build must be reproducible, so the GDD's random yaw /
+-- tilt / scatter values are hashed from the part index instead of rolled.
+local function noise(index: number, salt: number): number
+    local x = math.sin(index * 12.9898 + salt * 78.233) * 43758.5453
+    return x - math.floor(x)
+end
+
+local function lerp(a: number, b: number, t: number): number
+    return a + (b - a) * t
+end
+
+-- A part resting on a surface at `topY`, with `embed` of its height sunk into it.
+local function restingY(topY: number, height: number, embed: number?): number
+    return topY + height / 2 - height * (embed or 0.35)
+end
+
+local function zonePath(zoneId: string, landmarkId: string): string
+    return ("%s/%s/%s"):format(WORLD_FOLDER, zoneId, landmarkId)
+end
+
+local function basePath(zoneId: string): string
+    return ("%s/%s/Base"):format(WORLD_FOLDER, zoneId)
+end
+
+local function landmarkById(id: string): { [string]: any }
+    for _, landmark in LandmarkConfig.Landmarks do
+        if landmark.id == id then
+            return landmark
+        end
+    end
+    return { id = id, name = id, zone = "Shallows", parts = 0 }
+end
+
+local function promptHostById(id: string): { [string]: any }?
+    for _, host in LandmarkConfig.PromptHosts do
+        if host.id == id then
+            return host
+        end
+    end
+    return nil
+end
+
+-- One part. `opts.cf` wins over position/yaw/pitch/roll.
+local function add(parts: { PartSpec }, parent: string, name: string, position: Vector3, size: Vector3, opts: { [string]: any }?)
+    opts = opts or {}
+    local cf = opts.cf :: CFrame?
+    if cf == nil then
+        cf = CFrame.new(position)
+            * CFrame.Angles(
+                math.rad((opts.pitch :: number?) or 0),
+                math.rad((opts.yaw :: number?) or 0),
+                math.rad((opts.roll :: number?) or 0)
+            )
+    end
+
+    table.insert(parts, {
+        name = name,
+        parent = parent,
+        size = size,
+        cf = cf :: CFrame,
+        class = (opts.class :: string?) or "Part",
+        shape = opts.shape :: Enum.PartType?,
+        axis = opts.axis :: string?,
+        material = (opts.material :: Enum.Material?) or Enum.Material.Concrete,
+        color = (opts.color :: Color3?) or REEF_ROCK,
+        transparency = (opts.transparency :: number?) or 0,
+        decor = (opts.decor :: boolean?) or false,
+        collide = opts.collide :: boolean?,
+        query = opts.query :: boolean?,
+        outsideBuildZone = (opts.outsideBuildZone :: boolean?) or false,
+        props = opts.props :: { [string]: any }?,
+        attributes = opts.attributes :: { [string]: any }?,
+        light = opts.light :: { [string]: any }?,
+        prompt = opts.prompt :: { [string]: any }?,
+        billboard = opts.billboard :: { [string]: any }?,
+    })
+end
+
+-- A cylinder. Roblox has no cone Part and Appendix A forbids SpecialMesh, so every cone the
+-- GDD asks for is built as a tapered stack of cylinders (see L2 and S4).
+local function cyl(
+    parts: { PartSpec },
+    parent: string,
+    name: string,
+    position: Vector3,
+    height: number,
+    diameter: number,
+    opts: { [string]: any }?
+)
+    opts = opts or {}
+    opts.size = Vector3.new(height, diameter, diameter)
+    opts.shape = Enum.PartType.Cylinder
+    if ((opts.axis :: string?) or "Y") == "Y" then
+        opts.cf = ((opts.cf :: CFrame?) or CFrame.new(position)) * CFrame.Angles(0, 0, math.rad(90))
+    end
+    add(parts, parent, name, position, opts.size :: Vector3, opts)
+end
+
+-- ============================================================================
+-- Base geology (§3.1) — the seabeds the zones stand on
+-- ============================================================================
+
+local function buildShallowsSeabed(parts: { PartSpec })
+    local spec = ZoneConfig.Seabed.Shallows
+    local footprint = ZoneConfig.Zones.Shallows.footprint
+    local parent = basePath("Shallows")
+
+    local cell = spec.cellSize
+    local originX = (footprint.minX + footprint.maxX) / 2 - (spec.grid.columns * cell.X) / 2
+    local originZ = (footprint.minZ + footprint.maxZ) / 2 - (spec.grid.rows * cell.Z) / 2
+    local topY = spec.topY
+
+    for column = 1, spec.grid.columns do
+        for row = 1, spec.grid.rows do
+            local x = originX + (column - 0.5) * cell.X
+            local z = originZ + (row - 0.5) * cell.Z
+
+            if column == spec.trenchCell.column and row == spec.trenchCell.row then
+                -- The SE corner cell is the trench: descending sand steps whose deepest slab
+                -- sits at trenchTopY (-85), so the flats visibly fall away (§3.1).
+                local steps = spec.trenchSteps
+                local stepDepth = cell.Z / steps
+                for step = 1, steps do
+                    local stepTop = lerp(topY, spec.trenchTopY, step / steps)
+                    local stepZ = z - cell.Z / 2 + (step - 0.5) * stepDepth
+                    add(
+                        parts,
+                        parent,
+                        ("Base_Trench_Step_%d"):format(step),
+                        Vector3.new(x, stepTop - cell.Y / 2, stepZ),
+                        Vector3.new(spec.trenchSize.X, cell.Y, stepDepth),
+                        { material = spec.material, color = spec.color }
+                    )
+                end
+            else
+                add(
+                    parts,
+                    parent,
+                    ("Base_Seabed_%d_%d"):format(column, row),
+                    Vector3.new(x, topY - cell.Y / 2, z),
+                    cell,
+                    { material = spec.material, color = spec.color }
+                )
+            end
+        end
+    end
+end
+
+local function buildShelfSeabed(parts: { PartSpec })
+    local spec = ZoneConfig.Seabed.Shelf
+    local footprint = ZoneConfig.Zones.Shelf.footprint
+    local chasm = ZoneConfig.Chasm
+    local parent = basePath("Shelf")
+
+    local cell = spec.cellSize
+    local originX = (footprint.minX + footprint.maxX) / 2 - (spec.grid.columns * cell.X) / 2
+    local originZ = (footprint.minZ + footprint.maxZ) / 2 - (spec.grid.rows * cell.Z) / 2
+
+    for column = 1, spec.grid.columns do
+        for row = 1, spec.grid.rows do
+            local isChasm = column == spec.chasmSkipColumn
+            if isChasm then
+                local inSkippedRow = false
+                for _, skipRow in spec.chasmSkipRows do
+                    if row == skipRow then
+                        inSkippedRow = true
+                    end
+                end
+                isChasm = inSkippedRow
+            end
+
+            if not isChasm then
+                local topY = spec.topYs[row]
+                local x = originX + (column - 0.5) * cell.X
+                local z = originZ + (row - 0.5) * cell.Z
+                add(parts, parent, ("Base_Shelf_%d_%d"):format(column, row), Vector3.new(x, topY - cell.Y / 2, z), cell, {
+                    material = spec.material,
+                    color = SHELF_ROCK,
+                })
+            end
+        end
+    end
+
+    -- The two carved cells leave a gap either side of the chasm (S6 owns the rift itself).
+    -- `aprons` slabs close them, so the shelf still reads as 20 rock parts with no hole into
+    -- the void: one at the chasm's south mouth, one across its northern end.
+    local centreX = (footprint.minX + footprint.maxX) / 2
+    add(
+        parts,
+        parent,
+        "Base_Shelf_Apron_South",
+        Vector3.new(centreX, spec.topYs[2] - cell.Y / 2 - 1, chasm.minZ - 12),
+        Vector3.new(cell.X, cell.Y, 24),
+        { material = spec.material, color = SHELF_ROCK }
+    )
+    add(
+        parts,
+        parent,
+        "Base_Shelf_Apron_North",
+        Vector3.new(centreX, spec.topYs[4] - cell.Y / 2 + 9, chasm.maxZ + 40),
+        Vector3.new(cell.X, cell.Y, 80),
+        { material = spec.material, color = SHELF_ROCK }
+    )
+end
+
+-- ============================================================================
+-- THE SHALLOWS (§3.2)
+-- ============================================================================
+
+local function buildL1Dock(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L1")
+
+    add(parts, parent, "L1_Deck", Vector3.new(0, 6, -10), Vector3.new(60, 2, 30), {
+        material = Enum.Material.Wood,
+        color = DOCK_WOOD,
+    })
+
+    local pylons = {
+        { "L1_Pylon_NE", Vector3.new(28.5, -3, 3.5) },
+        { "L1_Pylon_NW", Vector3.new(-28.5, -3, 3.5) },
+        { "L1_Pylon_SE", Vector3.new(28.5, -3, -23.5) },
+        { "L1_Pylon_SW", Vector3.new(-28.5, -3, -23.5) },
+    }
+    for _, pylon in pylons do
+        add(parts, parent, pylon[1], pylon[2], Vector3.new(3, 20, 3), {
+            material = Enum.Material.Wood,
+            color = DOCK_WOOD_DARK,
+        })
+    end
+
+    -- Dive ramp: its top surface starts at the deck's north lip (0, 7, 5) and crosses the
+    -- water surface at Z ~= 8.7, continuing ~9 studs below it — a slipway, not a walkway.
+    local pitch = math.rad(RAMP_DEGREES)
+    local slope = Vector3.new(0, -math.sin(pitch), math.cos(pitch))
+    local normal = Vector3.new(0, math.cos(pitch), math.sin(pitch))
+    local lip = Vector3.new(0, DECK_TOP_Y, DECK_LIP_Z)
+    local rampCentre = lip + slope * (RAMP_LENGTH / 2) - normal * 0.5
+    add(parts, parent, "L1_Ramp", rampCentre, Vector3.new(RAMP_WIDTH, 1, RAMP_LENGTH), {
+        pitch = RAMP_DEGREES,
+        material = Enum.Material.Wood,
+        color = DOCK_WOOD,
+    })
+
+    add(parts, parent, "L1_LightTower", Vector3.new(0, 20, -22), Vector3.new(4, 24, 4), {
+        material = Enum.Material.Wood,
+        color = DOCK_WOOD_DARK,
+    })
+    add(parts, parent, "L1_Beacon", Vector3.new(0, 32, -22), Vector3.new(2, 2, 2), {
+        material = Enum.Material.Neon,
+        color = WARM_NEON,
+        decor = true,
+        light = { color = WARM_NEON, brightness = 2, range = 60 },
+    })
+end
+
+local function buildL2CoralSpire(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L2")
+    local foot = Vector3.new(-120, -45, 70) -- seabed top under the spire (§3.2 position)
+    local seabedTop = foot.Y
+
+    add(parts, parent, "L2_BaseRock", Vector3.new(foot.X, restingY(seabedTop, 12, 0.55), foot.Z), Vector3.new(40, 12, 40), {
+        material = Enum.Material.Slate,
+        color = REEF_ROCK,
+    })
+
+    -- §3.2: "a stack of 7 Cone primitives, heights 24-60, base diameter 40 -> 12". At the
+    -- printed heights the stack would stand above the waterline, so the builder keeps the
+    -- printed taper (40 -> 10, alternating colours) and spans the seabed to the surface.
+    local segments = {
+        { diameter = 40, height = 12 },
+        { diameter = 34, height = 9 },
+        { diameter = 28, height = 7 },
+        { diameter = 23, height = 6 },
+        { diameter = 18, height = 5 },
+        { diameter = 14, height = 3.5 },
+        { diameter = 10, height = 2.5 },
+    }
+    local y = seabedTop
+    for index, segment in segments do
+        local color = if index % 2 == 1 then CORAL_PINK else CORAL_TEAL
+        cyl(
+            parts,
+            parent,
+            ("L2_Spire_%d"):format(index),
+            Vector3.new(foot.X, y + segment.height / 2, foot.Z),
+            segment.height,
+            segment.diameter,
+            { material = Enum.Material.SmoothPlastic, color = color }
+        )
+        y += segment.height
+    end
+
+    -- A torus is not a primitive, so the Neon ring at Y -8 is a thin translucent disc.
+    add(parts, parent, "L2_Ring", Vector3.new(foot.X, -8, foot.Z), Vector3.new(1, 24, 24), {
+        shape = Enum.PartType.Cylinder,
+        axis = "Y",
+        material = Enum.Material.Neon,
+        color = GATE_NEON,
+        transparency = 0.35,
+        decor = true,
+    })
+end
+
+local function buildL3Trawler(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L3")
+    local hull = Vector3.new(140, -58, -60)
+
+    add(parts, parent, "L3_Hull", hull, Vector3.new(46, 10, 14), {
+        roll = 12, -- §3.2: hull rotated 12 deg on Z
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(84, 74, 62),
+    })
+    add(parts, parent, "L3_Bow", Vector3.new(112, -58, -60), Vector3.new(12, 10, 14), {
+        class = "WedgePart",
+        yaw = 180,
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(74, 66, 56),
+    })
+    add(parts, parent, "L3_Superstructure", Vector3.new(146, -49, -60), Vector3.new(12, 8, 10), {
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(70, 62, 52),
+    })
+    cyl(parts, parent, "L3_Funnel", Vector3.new(152, -42, -60), 12, 6, {
+        pitch = 8,
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(60, 52, 46),
+    })
+    cyl(parts, parent, "L3_Mast", Vector3.new(140, -36, -60), 34, 1, {
+        pitch = 38, -- §3.2: broken mast tilted 38 deg
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(66, 60, 52),
+    })
+
+    for index = 1, 7 do
+        local size = 2 + 3 * noise(index, 3)
+        local angle = index * GOLDEN_ANGLE
+        local radius = 12 + 18 * noise(index, 4)
+        add(
+            parts,
+            parent,
+            ("L3_Debris_%d"):format(index),
+            Vector3.new(
+                hull.X + math.cos(math.rad(angle)) * radius,
+                hull.Y + 6 * noise(index, 5),
+                hull.Z + math.sin(math.rad(angle)) * radius
+            ),
+            Vector3.new(size, size, size),
+            { material = Enum.Material.Metal, color = Color3.fromRGB(78, 70, 60), yaw = angle }
+        )
+    end
+end
+
+local function buildL4Kelp(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L4")
+    local centre = Vector3.new(-40, -45, -100)
+    local seabedTop = centre.Y
+
+    for index = 1, 30 do
+        local angle = index * GOLDEN_ANGLE
+        local radius = 10 + 45 * math.sqrt(index / 30)
+        local height = 20 + 35 * noise(index, 7)
+        cyl(
+            parts,
+            parent,
+            ("L4_Frond_%d"):format(index),
+            Vector3.new(
+                centre.X + math.cos(math.rad(angle)) * radius,
+                seabedTop + height / 2,
+                centre.Z + math.sin(math.rad(angle)) * radius
+            ),
+            height,
+            1.2,
+            {
+                pitch = -14 + 28 * noise(index, 8), -- §3.2: tilted randomly +/- 14 deg
+                yaw = 360 * noise(index, 9),
+                material = Enum.Material.Neon,
+                color = KELP_GREEN,
+                transparency = 0.35,
+                decor = true,
+            }
+        )
+    end
+
+    for index = 1, 4 do
+        local angle = index * GOLDEN_ANGLE + 40
+        local size = 8 + 8 * noise(index, 11)
+        add(
+            parts,
+            parent,
+            ("L4_Rock_%d"):format(index),
+            Vector3.new(
+                centre.X + math.cos(math.rad(angle)) * 30,
+                restingY(seabedTop, size),
+                centre.Z + math.sin(math.rad(angle)) * 30
+            ),
+            Vector3.new(size, size, size),
+            { material = Enum.Material.Slate, color = REEF_ROCK, yaw = angle }
+        )
+    end
+end
+
+local function buildL5DeepHole(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L5")
+    local hole = Vector3.new(0, -85, 90)
+    local mouthTop = -45 -- the sand surface the mouth is cut into
+    local mouth = Vector3.new(60, 22, 40)
+
+    -- The mouth is the dark volume the sand opens into (§3.2: "view straight down into
+    -- unlit water"). It does not collide or answer queries; the sand around it does.
+    add(
+        parts,
+        parent,
+        "L5_Mouth",
+        Vector3.new(hole.X, mouthTop - mouth.Y / 2 + 0.02, hole.Z),
+        mouth,
+        { material = Enum.Material.SmoothPlastic, color = DEEP_VOID, transparency = 0.15, collide = false, query = false }
+    )
+
+    local lips = {
+        { "L5_Lip_W", Vector3.new(-32, -42, 90), Vector3.new(14, 6, 44) },
+        { "L5_Lip_E", Vector3.new(32, -42, 90), Vector3.new(14, 6, 44) },
+        { "L5_Lip_N", Vector3.new(0, -42, 66), Vector3.new(44, 6, 14) },
+        { "L5_Lip_S", Vector3.new(0, -42, 114), Vector3.new(44, 6, 14) },
+        { "L5_Lip_Overhang", Vector3.new(-20, -40, 76), Vector3.new(20, 8, 20) },
+    }
+    for index, lip in lips do
+        add(parts, parent, lip[1], lip[2], lip[3], {
+            material = Enum.Material.Slate,
+            color = REEF_ROCK,
+            yaw = 12 * noise(index, 13),
+        })
+    end
+end
+
+local function buildL6SandChannels(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L6")
+    local seabedTop = ZoneConfig.Seabed.Shallows.topY
+
+    for index = 1, 12 do
+        local x = -172 + (index - 1) * 31 -- 90 wide: keeps every ridge inside §3.0's X +/220
+        local z = -140 + 18 * ((index * 7) % 11)
+        add(parts, parent, ("L6_Ridge_%d"):format(index), Vector3.new(x, seabedTop + 1.5, z), Vector3.new(90, 3, 16), {
+            -- §3.2: "at random yaw" — hashed, so every build is still identical.
+            yaw = 180 * noise(index, 17),
+            material = Enum.Material.Sand,
+            color = SAND,
+        })
+    end
+end
+
+local function buildL7FishRocks(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L7")
+    local centre = Vector3.new(-160, -45, 30)
+    local seabedTop = centre.Y
+
+    for index = 1, 8 do
+        local angle = index * GOLDEN_ANGLE
+        local radius = 8 + 22 * math.sqrt(index / 8)
+        local size = 14 + 16 * noise(index, 19)
+        add(
+            parts,
+            parent,
+            ("L7_Rock_%d"):format(index),
+            Vector3.new(
+                centre.X + math.cos(math.rad(angle)) * radius,
+                restingY(seabedTop, size),
+                centre.Z + math.sin(math.rad(angle)) * radius
+            ),
+            Vector3.new(size, size * 0.8, size),
+            { material = Enum.Material.Slate, color = REEF_ROCK, yaw = angle, roll = -10 + 20 * noise(index, 21) }
+        )
+    end
+end
+
+local function buildL9Buoys(parts: { PartSpec })
+    local parent = zonePath("Shallows", "L9")
+    local buoys = landmarkById("L9").positions -- (0, 1, 120), (-80, 1, 60), (80, 1, 60)
+
+    for index, position in buoys do
+        local y = position.Y
+        add(parts, parent, ("L9_Float_%d"):format(index), Vector3.new(position.X, y - 0.5, position.Z), Vector3.new(4, 4, 4), {
+            shape = Enum.PartType.Ball,
+            material = Enum.Material.SmoothPlastic,
+            color = Color3.fromRGB(220, 120, 90),
+        })
+        cyl(parts, parent, ("L9_Mast_%d"):format(index), Vector3.new(position.X, y + 4.5, position.Z), 10, 0.6, {
+            material = Enum.Material.Metal,
+            color = Color3.fromRGB(200, 200, 205),
+            roll = 3 * noise(index, 23),
+        })
+        add(parts, parent, ("L9_Light_%d"):format(index), Vector3.new(position.X, y + 10, position.Z), Vector3.new(1.6, 1.6, 1.6), {
+            shape = Enum.PartType.Ball,
+            material = Enum.Material.Neon,
+            color = WARM_NEON,
+            decor = true,
+            light = { color = WARM_NEON, brightness = 2, range = 45 },
+        })
+    end
+end
+
+-- ============================================================================
+-- THE RIM (§3.3) — the threshold between the two zones
+-- ============================================================================
+
+local function buildRimWall(parts: { PartSpec })
+    local parent = zonePath("Rim", "R1")
+    local wall = ZoneConfig.Rim.wall
+    local gate = ZoneConfig.Rim.gate
+
+    local steps = wall.steps
+    local stepHeight = (wall.topY - wall.bottomY) / steps
+    local stepDepth = (wall.maxZ - wall.minZ) / steps
+    local partHeight = 18 -- §3.3: each step is 5 rock Parts ~90 x 18 x 14
+    local partWidth = 100
+    local partDepth = 14
+
+    -- Four columns per step cover |X| 30..210, leaving the 50-stud gate notch (X -25..25)
+    -- and its frame clear. The centre column exists only below the notch floor, so the notch
+    -- stays open for R2's ramp. Names carry the column ordinal: §Appendix A's naming rule
+    -- means a scripter must be able to find any part by name, so they have to be unique.
+    local columns = { { -160, "W1" }, { -80, "W2" }, { 80, "E1" }, { 160, "E2" } }
+    local notchFloorY = gate.rampBottomY
+
+    for step = 1, steps do
+        local top = wall.topY - (step - 1) * stepHeight
+        local centreY = top - partHeight / 2
+        local z = wall.minZ + (step - 0.5) * stepDepth
+
+        for _, column in columns do
+            local columnX = column[1]
+            add(
+                parts,
+                parent,
+                ("R1_Step_%d_Rock_%s"):format(step, column[2]),
+                Vector3.new(columnX, centreY, z),
+                Vector3.new(partWidth, partHeight, partDepth),
+                {
+                    yaw = 3 + 6 * noise(step * 10 + columnX, 29), -- §3.3: yaw-rotated 3-9 deg
+                    material = Enum.Material.Slate,
+                    color = RIM_ROCK,
+                }
+            )
+        end
+
+        if centreY < notchFloorY then
+            add(parts, parent, ("R1_Step_%d_Rock_C"):format(step), Vector3.new(0, centreY, z), Vector3.new(partWidth, partHeight, partDepth), {
+                yaw = 3 + 6 * noise(step, 31),
+                material = Enum.Material.Slate,
+                color = RIM_ROCK,
+            })
+        end
+    end
+
+    -- The rest of R1's 40: shoulders at the notch lip and three outcrops so the face reads
+    -- as rock rather than as a grid.
+    add(parts, parent, "R1_GateShelf_W", Vector3.new(-33, -46, 175), Vector3.new(16, 8, 50), {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = 5,
+    })
+    add(parts, parent, "R1_GateShelf_E", Vector3.new(33, -46, 175), Vector3.new(16, 8, 50), {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = -5,
+    })
+    for index, columnX in { -140, 0, 140 } do
+        add(
+            parts,
+            parent,
+            ("R1_Outcrop_%d"):format(index),
+            Vector3.new(columnX, wall.topY - 20 - 40 * index, 168 + 6 * index),
+            Vector3.new(46, 30, 22),
+            { material = Enum.Material.Slate, color = RIM_ROCK, yaw = 8 * noise(index, 37) }
+        )
+    end
+end
+
+local function buildRimGate(parts: { PartSpec })
+    local parent = zonePath("Rim", "R2")
+    local gate = ZoneConfig.Rim.gate
+
+    local rise = gate.rampTopY - gate.rampBottomY -- 70 studs of Y
+    local run = gate.maxZ - gate.minZ -- 50 studs of Z
+    local length = math.sqrt(rise * rise + run * run)
+    local degrees = math.deg(math.atan(rise / run))
+    local centreZ = (gate.minZ + gate.maxZ) / 2
+
+    add(
+        parts,
+        parent,
+        "R2_GateRamp",
+        Vector3.new(0, (gate.rampTopY + gate.rampBottomY) / 2, centreZ),
+        Vector3.new(gate.width, 4, length),
+        { pitch = degrees, material = Enum.Material.Slate, color = SHELF_ROCK }
+    )
+
+    add(parts, parent, "R2_Pillar_W", Vector3.new(-38, -75, centreZ), gate.pillarSize, {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = 6,
+    })
+    add(parts, parent, "R2_Pillar_E", Vector3.new(38, -75, centreZ), gate.pillarSize, {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = -6,
+    })
+    add(parts, parent, "R2_Lintel", Vector3.new(0, -32, centreZ), Vector3.new(102, 8, 30), {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+    })
+    -- The threshold read: a cold Neon keystone over the opening (R3's palette), so crossing
+    -- into The Shelf is legible from both sides.
+    add(parts, parent, "R2_Keystone", Vector3.new(0, -24, centreZ), Vector3.new(14, 10, 10), {
+        material = Enum.Material.Neon,
+        color = GATE_NEON,
+        transparency = 0.25,
+        decor = true,
+        light = { color = GATE_NEON, brightness = 1.2, range = 40 },
+    })
+    add(parts, parent, "R2_Threshold", Vector3.new(0, gate.rampBottomY - 2, gate.maxZ - 6), Vector3.new(gate.width, 4, 16), {
+        material = Enum.Material.Slate,
+        color = SHELF_ROCK,
+    })
+    add(parts, parent, "R2_Buttress_W", Vector3.new(-60, -100, centreZ), Vector3.new(30, 40, 30), {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = 10,
+    })
+    add(parts, parent, "R2_Buttress_E", Vector3.new(60, -100, centreZ), Vector3.new(30, 40, 30), {
+        material = Enum.Material.Slate,
+        color = RIM_ROCK,
+        yaw = -10,
+    })
+end
+
+local function buildRimCurrent(parts: { PartSpec })
+    local parent = zonePath("Rim", "R3")
+    local current = ZoneConfig.Rim.current
+    local midY = (current.topY + current.bottomY) / 2
+    local height = current.topY - current.bottomY
+
+    local index = 0
+    for _, z in { 162, 175, 188 } do
+        for _, x in { -10, 10 } do
+            index += 1
+            add(parts, parent, ("R3_Strip_%d"):format(index), Vector3.new(x, midY, z), Vector3.new(1.5, height, 1.5), {
+                material = Enum.Material.Neon,
+                color = GATE_NEON,
+                transparency = 0.75, -- §3.3: 0.75 transparency, visual only
+                decor = true,
+            })
+        end
+    end
+end
+
+-- ============================================================================
+-- THE SHELF (§3.4)
+-- ============================================================================
+
+local function buildS1Lip(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S1")
+    local lip = Vector3.new(0, -108, 240)
+    local gate = ZoneConfig.Rim.gate
+    local lipTop = lip.Y + 3
+
+    add(parts, parent, "S1_Ledge", lip, Vector3.new(130, 6, 70), {
+        material = Enum.Material.Slate,
+        color = SHELF_ROCK,
+    })
+
+    -- Two ramps bridge the Rim Gate's foot (Z 200, Y -120) up to the Lip's surface so the
+    -- arrival is a slope, not a cliff.
+    local rise = 15
+    local run = 40
+    local rampLength = math.sqrt(rise * rise + run * run)
+    local degrees = -math.deg(math.atan(rise / run))
+    for _, side in { { -35, "W" }, { 35, "E" } } do
+        add(
+            parts,
+            parent,
+            ("S1_Ramp_%s"):format(side[2]),
+            Vector3.new(side[1], gate.rampBottomY + rise / 2, gate.maxZ + run / 2),
+            Vector3.new(40, 6, rampLength),
+            { pitch = degrees, material = Enum.Material.Slate, color = SHELF_ROCK }
+        )
+    end
+
+    for index = 1, 3 do
+        local angle = index * GOLDEN_ANGLE
+        local size = 20 + 10 * noise(index, 41)
+        add(
+            parts,
+            parent,
+            ("S1_Boulder_%d"):format(index),
+            Vector3.new(
+                lip.X + math.cos(math.rad(angle)) * 55,
+                restingY(lipTop, size),
+                lip.Z + math.sin(math.rad(angle)) * 28
+            ),
+            Vector3.new(size, size * 0.8, size),
+            { material = Enum.Material.Slate, color = SHELF_ROCK_DARK, yaw = angle }
+        )
+    end
+
+    for index = 1, 3 do
+        add(parts, parent, ("S1_Fin_%d"):format(index), Vector3.new(-45 + 45 * (index - 1), lipTop + 2, 272), Vector3.new(30, 5, 12), {
+            material = Enum.Material.Slate,
+            color = SHELF_ROCK_DARK,
+            yaw = 10 * noise(index, 43),
+        })
+    end
+
+    add(parts, parent, "S1_BackStep", Vector3.new(0, -101, 292), Vector3.new(120, 8, 40), {
+        material = Enum.Material.Slate,
+        color = Color3.fromRGB(60, 66, 74),
+    })
+end
+
+local function buildS2CreviceRow(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S2")
+    local dens = SpawnConfig.LanternEel.dens -- §4.6: 7 dens, opening faces -Z
+
+    local index = 0
+    for _, position in dens do
+        index += 1
+        add(parts, parent, ("S2_Den_%d"):format(index), position, Vector3.new(10, 6, 14), {
+            material = Enum.Material.Slate,
+            color = Color3.fromRGB(30, 34, 40),
+            attributes = {
+                -- The matching spawn anchor lives in Spawns/LanternEel; this links the two.
+                SpawnNode = ("LanternEel/Den_%d"):format(index),
+                OpeningFacing = SpawnConfig.LanternEel.openingFacing,
+            },
+            -- §3.4: "a 3-stud Neon speck to be found in the dark". S2's budget is the 7 dens,
+            -- so the speck is a light rather than an eighth part.
+            light = { color = EEL_NEON, brightness = 1, range = 12 },
+        })
+    end
+end
+
+local function buildS3GhostLedge(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S3")
+    local ledge = Vector3.new(0, -175, 380)
+    local top = ledge.Y + 3
+
+    add(parts, parent, "S3_Ledge", ledge, Vector3.new(200, 6, 80), {
+        material = Enum.Material.Slate,
+        color = SHELF_ROCK_DARK,
+    })
+
+    for index = 1, 6 do
+        add(parts, parent, ("S3_Fin_%d"):format(index), Vector3.new(-75 + 30 * (index - 1), top + 2.5, 345), Vector3.new(30, 5, 12), {
+            material = Enum.Material.Slate,
+            color = Color3.fromRGB(50, 58, 68),
+            yaw = -8 + 16 * noise(index, 47),
+        })
+    end
+
+    add(parts, parent, "S3_MineralVein", Vector3.new(0, top + 1, 405), Vector3.new(60, 3, 8), {
+        material = Enum.Material.Neon,
+        color = MINERAL_NEON,
+        transparency = 0.45,
+        decor = true,
+    })
+end
+
+local function buildS4ThermalVents(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S4")
+    local field = Vector3.new(110, -205, 440)
+    local floorTop = ZoneConfig.Seabed.Shelf.topYs[4] + 4
+
+    for index = 1, 6 do
+        local angle = index * GOLDEN_ANGLE
+        local radius = 6 + 22 * noise(index, 53)
+        local x = field.X + math.cos(math.rad(angle)) * radius
+        local z = field.Z + math.sin(math.rad(angle)) * radius
+        local height = 10 + 8 * noise(index, 59)
+        local diameter = 8 - 2 * noise(index, 61)
+
+        cyl(parts, parent, ("S4_Chimney_%d"):format(index), Vector3.new(x, floorTop + height / 2, z), height, diameter, {
+            material = Enum.Material.Slate,
+            color = Color3.fromRGB(48, 40, 36),
+            yaw = 6 * noise(index, 63),
+        })
+        cyl(parts, parent, ("S4_Rim_%d"):format(index), Vector3.new(x, floorTop + height + 0.6, z), 1.2, diameter + 2, {
+            material = Enum.Material.Neon,
+            color = VENT_NEON,
+            transparency = 0.15,
+            decor = true,
+            -- §3.4: 3 PointLights across the field — the Shelf's only warm light.
+            light = if index <= 3 then { color = Color3.fromRGB(255, 140, 70), brightness = 2, range = 40 } else nil,
+        })
+    end
+
+    add(parts, parent, "S4_Mound_1", Vector3.new(field.X - 34, floorTop + 3, field.Z + 18), Vector3.new(24, 8, 24), {
+        material = Enum.Material.Slate,
+        color = Color3.fromRGB(52, 44, 40),
+        yaw = 14,
+    })
+    add(parts, parent, "S4_Mound_2", Vector3.new(field.X + 30, floorTop + 2.4, field.Z - 16), Vector3.new(20, 7, 20), {
+        material = Enum.Material.Slate,
+        color = Color3.fromRGB(52, 44, 40),
+        yaw = -22,
+    })
+end
+
+local function buildS5SunkenPillars(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S5")
+    local field = Vector3.new(-130, -165, 330)
+    local floorTop = ZoneConfig.Seabed.Shelf.topYs[2]
+
+    for index = 1, 5 do
+        local length = 60 + 30 * noise(index, 67)
+        local angle = index * GOLDEN_ANGLE
+        add(
+            parts,
+            parent,
+            ("S5_Pillar_%d"):format(index),
+            Vector3.new(
+                field.X + math.cos(math.rad(angle)) * 40,
+                floorTop + 10,
+                field.Z + math.sin(math.rad(angle)) * 40
+            ),
+            Vector3.new(length, 16, 16),
+            {
+                shape = Enum.PartType.Cylinder, -- axis X: lying on its side
+                yaw = 20 + 50 * noise(index, 71), -- §3.4: yaw 20-70 deg
+                roll = -12 + 24 * noise(index, 73), -- tilt +/- 12 deg
+                material = Enum.Material.Slate,
+                color = Color3.fromRGB(70, 76, 84),
+            }
+        )
+    end
+
+    for index = 1, 4 do
+        local angle = index * GOLDEN_ANGLE + 25
+        local size = 18 + 8 * noise(index, 79)
+        add(
+            parts,
+            parent,
+            ("S5_Rubble_%d"):format(index),
+            Vector3.new(
+                field.X + math.cos(math.rad(angle)) * 60,
+                floorTop + size * 0.3,
+                field.Z + math.sin(math.rad(angle)) * 55
+            ),
+            Vector3.new(size, size * 0.6, size * 0.8),
+            { material = Enum.Material.Slate, color = Color3.fromRGB(64, 70, 78), yaw = angle }
+        )
+    end
+end
+
+local function buildS6Chasm(parts: { PartSpec })
+    local parent = zonePath("Shelf", "S6")
+    local chasm = ZoneConfig.Chasm
+    local spanX = chasm.maxX - chasm.minX
+    local spanZ = chasm.maxZ - chasm.minZ
+    local centreZ = (chasm.minZ + chasm.maxZ) / 2
+
+    -- §3.4/§7: the deepest playable point, built dark and unfinished on purpose — this is
+    -- where the next update's content goes.
+    add(parts, parent, "S6_Floor", Vector3.new(0, chasm.floorY - 2, centreZ), Vector3.new(spanX, 4, spanZ), {
+        material = Enum.Material.Slate,
+        color = DEEP_VOID,
+    })
+
+    -- §3.4: "walls from 12 large Parts 80 x 30 x 20 stepped down on both sides".
+    for _, side in { { -1, "W" }, { 1, "E" } } do
+        for tier = 1, 2 do
+            for step = 1, 3 do
+                add(
+                    parts,
+                    parent,
+                    ("S6_Wall_%s_%d_%d"):format(side[2], tier, step),
+                    Vector3.new(side[1] * 60, chasm.floorY + 15 + (tier - 1) * 14, chasm.minZ + 30 + (step - 1) * 50),
+                    Vector3.new(80, 30, 20),
+                    {
+                        material = Enum.Material.Slate,
+                        color = if tier == 1 then SHELF_ROCK_DARK else Color3.fromRGB(36, 42, 50),
+                        yaw = side[1] * (4 + 6 * noise(tier * 10 + step, 83)),
+                    }
+                )
+            end
+        end
+    end
+
+    for index = 1, 6 do
+        local side = if index <= 3 then -1 else 1
+        local slot = ((index - 1) % 3) + 1
+        add(
+            parts,
+            parent,
+            ("S6_LipRock_%d"):format(index),
+            Vector3.new(side * 14 * slot, -192, chasm.minZ + 12 + (slot - 1) * 26),
+            Vector3.new(30, 12, 40),
+            { material = Enum.Material.Slate, color = Color3.fromRGB(40, 46, 54), yaw = 6 * noise(index, 89) }
+        )
+    end
+
+    for index = 1, 3 do
+        add(
+            parts,
+            parent,
+            ("S6_Rubble_%d"):format(index),
+            Vector3.new(-20 + 20 * index, chasm.floorY + 8, centreZ - 60 + 30 * index),
+            Vector3.new(20, 14, 20),
+            { material = Enum.Material.Slate, color = Color3.fromRGB(34, 40, 48), yaw = 25 * noise(index, 97) }
+        )
+    end
+end
+
+-- ============================================================================
+-- World props, water and spawn anchors (§1, §3.0, §4.6, Appendix A)
+-- ============================================================================
+
+local function buildSpawns(parts: { PartSpec }, layout: Layout)
+    -- §11: the player spawns at (0, 8, -20) on the dock, standing, facing the water (+Z).
+    -- This SpawnLocation replaces the stand-in pad the scaffold shipped: it sits on L1_Deck's
+    -- top (Y 7) and its LookVector points +Z, which is the way a spawned character faces.
+    local spawnPoint = ZoneConfig.InteractionPoints.PlayerSpawn
+    add(parts, SPAWNS_FOLDER, "SpawnLocation", spawnPoint - Vector3.new(0, 0.5, 0), Vector3.new(12, 1, 12), {
+        class = "SpawnLocation",
+        material = Enum.Material.Wood,
+        color = DOCK_WOOD,
+        cf = CFrame.new(spawnPoint - Vector3.new(0, 0.5, 0)) * CFrame.Angles(0, math.pi, 0),
+        props = { Duration = 0, Neutral = true, Enabled = true },
+    })
+
+    -- L1's four prompt-host props live here (Appendix A), not in the Shallows folder, but by
+    -- the naming rule they are L1 parts and are counted as such. Their ProximityPrompts are
+    -- created now; their verbs are the owning service's TODO.
+    local rack = promptHostById("RodRack")
+    local rackAt = if rack ~= nil then rack.position else Vector3.new(12, 9, -10)
+    add(parts, SPAWNS_FOLDER, "L1_RodRack", rackAt, Vector3.new(7, 3, 2), {
+        material = Enum.Material.Wood,
+        color = DOCK_WOOD_DARK,
+        attributes = { PromptId = "RodRack" },
+        prompt = rack,
+    })
+    add(parts, SPAWNS_FOLDER, "L1_RodRack_Top", rackAt + Vector3.new(0, 1.75, 0), Vector3.new(7.4, 0.6, 2.4), {
+        material = Enum.Material.Metal,
+        color = Color3.fromRGB(180, 180, 190),
+    })
+
+    local trader = promptHostById("TideTrader")
+    local traderAt = if trader ~= nil then trader.position else Vector3.new(-14, 9, -10)
+    add(parts, SPAWNS_FOLDER, "L1_TideTrader", traderAt, Vector3.new(8, 6, 8), {
+        material = Enum.Material.Wood,
+        color = Color3.fromRGB(92, 70, 54),
+        attributes = { PromptId = "TideTrader" },
+        prompt = trader,
+    })
+    add(parts, SPAWNS_FOLDER, "L1_TideTrader_Sign", traderAt + Vector3.new(0, 4.5, 4.2), Vector3.new(7, 2, 0.6), {
+        material = Enum.Material.Neon,
+        color = WARM_NEON,
+        transparency = 0.1,
+        decor = true,
+    })
+
+    add(parts, SPAWNS_FOLDER, "DiveMarker", ZoneConfig.InteractionPoints.DiveMarker, Vector3.new(12, 0.6, 2.2), {
+        material = Enum.Material.Neon,
+        color = GATE_NEON,
+        transparency = 0.2,
+        decor = true,
+        attributes = { PromptId = "DiveMarker" },
+        prompt = promptHostById("DiveMarker"),
+        billboard = { text = "DIVE HERE", color = GATE_NEON },
+    })
+
+    -- §4.6 spawn anchors: one invisible host part per species (Appendix A: "spawn volumes
+    -- are Attachments rather than Parts, so they cannot be rendered by accident") with an
+    -- Attachment per coordinate. FishService spawns into these; WorldService never does.
+    local groups = {
+        { species = "SilverSardine", config = SpawnConfig.SilverSardine, list = SpawnConfig.SilverSardine.anchors, prefix = "Node" },
+        { species = "SunsetGrouper", config = SpawnConfig.SunsetGrouper, list = SpawnConfig.SunsetGrouper.nodes, prefix = "Node" },
+        { species = "ReefBass", config = SpawnConfig.ReefBass, list = SpawnConfig.ReefBass.nodes, prefix = "Node" },
+        { species = "LanternEel", config = SpawnConfig.LanternEel, list = SpawnConfig.LanternEel.dens, prefix = "Den" },
+        { species = "GhostRay", config = SpawnConfig.GhostRay, list = SpawnConfig.GhostRay.nodes, prefix = "Node" },
+    }
+
+    for _, group in groups do
+        local folder = ("%s/%s"):format(SPAWNS_FOLDER, group.species)
+        table.insert(layout.folders, folder)
+
+        local centre = Vector3.new(0, 0, 0)
+        for _, position in group.list do
+            centre += position
+        end
+        centre = centre / #group.list
+
+        local hostName = ("%s_AnchorHost"):format(group.species)
+        add(parts, folder, hostName, centre, Vector3.new(1, 1, 1), {
+            transparency = 1,
+            decor = true,
+            collide = false,
+            query = false,
+            outsideBuildZone = true, -- it is a volume anchor, not scenery
+            attributes = { Species = group.species, Kind = group.config.kind, AnchorCount = #group.list },
+        })
+
+        local index = 0
+        for _, position in group.list do
+            index += 1
+            local attributes: { [string]: any } = {
+                Species = group.species,
+                Kind = group.config.kind,
+                Index = index,
+                NodeName = ("%s_%d"):format(group.prefix, index),
+            }
+            -- Every other scalar field of the species' SpawnConfig entry is a behaviour
+            -- parameter (box, waypointRadius, driftRadius, loopBox, openingFacing): copy them
+            -- onto the anchor so FishService reads its rules from one place.
+            for key, value in group.config do
+                if key ~= "kind" and type(value) ~= "table" then
+                    attributes[key] = value
+                end
+            end
+            table.insert(layout.anchors, {
+                name = ("%s_%d"):format(group.prefix, index),
+                host = hostName,
+                hostParent = folder,
+                position = position - centre,
+                attributes = attributes,
+            })
+        end
+    end
+end
+
+local function buildWater(parts: { PartSpec }, layout: Layout)
+    local region = ZoneConfig.WaterRegion
+    local size = Vector3.new(region.maxX - region.minX, region.topY - region.bottomY, region.maxZ - region.minZ)
+    local centre = Vector3.new(
+        (region.minX + region.maxX) / 2,
+        (region.topY + region.bottomY) / 2,
+        (region.minZ + region.maxZ) / 2
+    )
+    layout.water = { size = size }
+
+    -- One invisible marker lets a scripter or the artist see the water volume; the water
+    -- itself is Terrain (§3.0: "Terrain holds water and nothing else").
+    add(parts, WATER_FOLDER, LandmarkConfig.WorldPropNames.WaterRegionMarker, centre, size, {
+        transparency = 1,
+        decor = true,
+        collide = false,
+        query = false,
+        outsideBuildZone = true, -- it *is* the water volume (§3.0), which is wider than the build zone
+        attributes = { TopY = region.topY, BottomY = region.bottomY },
+    })
+end
+
+-- ============================================================================
+-- Layout
+-- ============================================================================
+
+--- The whole world as data: folders, part specs, spawn anchors and the water volume.
+--- Pure — no Instances are touched, so it can be asserted before anything is built.
+function WorldService:GetLayout(): Layout
+    local layout: Layout = { folders = {}, parts = {}, anchors = {}, water = { size = Vector3.new(0, 0, 0) } }
+
+    table.insert(layout.folders, WORLD_FOLDER)
+    table.insert(layout.folders, WATER_FOLDER)
+    table.insert(layout.folders, SPAWNS_FOLDER)
+    for zoneId in ZoneConfig.Zones do
+        table.insert(layout.folders, ("%s/%s"):format(WORLD_FOLDER, zoneId))
+    end
+    for _, landmark in LandmarkConfig.Landmarks do
+        table.insert(layout.folders, zonePath(landmark.zone, landmark.id))
+    end
+    table.insert(layout.folders, basePath("Shallows"))
+    table.insert(layout.folders, basePath("Shelf"))
+
+    buildShallowsSeabed(layout.parts)
+    buildShelfSeabed(layout.parts)
+
+    buildL1Dock(layout.parts)
+    buildL2CoralSpire(layout.parts)
+    buildL3Trawler(layout.parts)
+    buildL4Kelp(layout.parts)
+    buildL5DeepHole(layout.parts)
+    buildL6SandChannels(layout.parts)
+    buildL7FishRocks(layout.parts)
+    -- L8 Sun Shafts is deliberately 0 parts (§3.2): the Technical Artist owns it.
+    buildL9Buoys(layout.parts)
+
+    buildRimWall(layout.parts)
+    buildRimGate(layout.parts)
+    buildRimCurrent(layout.parts)
+
+    buildS1Lip(layout.parts)
+    buildS2CreviceRow(layout.parts)
+    buildS3GhostLedge(layout.parts)
+    buildS4ThermalVents(layout.parts)
+    buildS5SunkenPillars(layout.parts)
+    buildS6Chasm(layout.parts)
+
+    buildSpawns(layout.parts, layout)
+    buildWater(layout.parts, layout)
+
+    return layout
+end
+
+--- Everything the built layout must satisfy: each landmark's part count from §3.2-§3.4,
+--- the Appendix A world total, the §3.0 build zone, and the §4.6 anchor counts.
+--- Returns a list of human-readable problems (empty = clean). Pure, so it can be run before
+--- or after Build().
+function WorldService:ValidateLayout(layout: Layout?): { string }
+    local resolved = if layout ~= nil then layout else self:GetLayout()
+    local problems: { string } = {}
+
+    local byLandmark: { [string]: number } = {}
+    for _, spec in resolved.parts do
+        local id = spec.name:match("^([LRS]%d)_")
+        if id ~= nil then
+            byLandmark[id] = (byLandmark[id] or 0) + 1
+        end
+    end
+    for _, landmark in LandmarkConfig.Landmarks do
+        local actual = byLandmark[landmark.id] or 0
+        if actual ~= landmark.parts then
+            table.insert(
+                problems,
+                ("%s %s: built %d parts, LandmarkConfig says %d"):format(landmark.id, landmark.name, actual, landmark.parts)
+            )
+        end
+    end
+
+    if #resolved.parts ~= LandmarkConfig.PartBudget.World then
+        table.insert(
+            problems,
+            ("world total: built %d parts, LandmarkConfig.PartBudget.World says %d"):format(#resolved.parts, LandmarkConfig.PartBudget.World)
+        )
+    end
+
+    -- §3.0: nothing outside the build zone (the water volume and its marker are the space
+    -- itself, so they are exempt by flag rather than by exception).
+    for _, spec in resolved.parts do
+        if not spec.outsideBuildZone then
+            local p = spec.cf.Position
+            local size = spec.size
+            local box = ZoneConfig.BuildZone
+            if
+                p.X - size.X / 2 < box.minX
+                or p.X + size.X / 2 > box.maxX
+                or p.Z - size.Z / 2 < box.minZ
+                or p.Z + size.Z / 2 > box.maxZ
+            then
+                table.insert(problems, ("%s is placed outside ZoneConfig.BuildZone"):format(spec.name))
+            end
+        end
+    end
+
+    -- §Appendix A: a scripter must be able to find any world part by name, so names have to
+    -- be unique inside their folder.
+    local seen: { [string]: boolean } = {}
+    for _, spec in resolved.parts do
+        local key = ("%s/%s"):format(spec.parent, spec.name)
+        if seen[key] then
+            table.insert(problems, ("duplicate part name %s in %s"):format(spec.name, spec.parent))
+        end
+        seen[key] = true
+    end
+    for _, anchor in resolved.anchors do
+        local key = ("%s/%s"):format(anchor.hostParent, anchor.name)
+        if seen[key] then
+            table.insert(problems, ("duplicate anchor name %s in %s"):format(anchor.name, anchor.hostParent))
+        end
+        seen[key] = true
+    end
+
+    -- §4.6: one anchor per coordinate, per species.
+    local counts: { [string]: number } = {}
+    for _, anchor in resolved.anchors do
+        counts[anchor.attributes.Species] = (counts[anchor.attributes.Species] or 0) + 1
+    end
+    local groups = {
+        { "SilverSardine", #SpawnConfig.SilverSardine.anchors },
+        { "SunsetGrouper", #SpawnConfig.SunsetGrouper.nodes },
+        { "ReefBass", #SpawnConfig.ReefBass.nodes },
+        { "LanternEel", #SpawnConfig.LanternEel.dens },
+        { "GhostRay", #SpawnConfig.GhostRay.nodes },
+    }
+    for _, group in groups do
+        if (counts[group[1]] or 0) ~= group[2] then
+            table.insert(
+                problems,
+                ("%s: %d spawn anchors, SpawnConfig has %d"):format(group[1], counts[group[1]] or 0, group[2])
+            )
+        end
+    end
+
+    return problems
+end
+
+-- ============================================================================
+-- Build (idempotent)
+-- ============================================================================
+
+local function folderAt(root: Instance, path: string): Instance
+    local current = root
+    for segment in path:gmatch("[^/]+") do
+        local nextFolder = current:FindFirstChild(segment)
+        if nextFolder == nil then
+            local created: any = Instance.new("Folder")
+            created.Name = segment
+            created.Parent = current
+            nextFolder = created
+        end
+        current = nextFolder
+    end
+    return current
+end
+
+local function clearChildren(folder: Instance)
+    for _, child in folder:GetChildren() do
+        child:Destroy()
+    end
+end
+
+local function applyPrompt(part: any, spec: PartSpec)
+    if spec.prompt == nil then
+        return
+    end
+    local proximity: any = Instance.new("ProximityPrompt")
+    proximity.Name = "Prompt"
+    proximity.ActionText = spec.prompt.actionText or "Use"
+    proximity.ObjectText = spec.prompt.objectText or ""
+    proximity.HoldDuration = spec.prompt.holdDuration or 0
+    proximity.MaxActivationDistance = 12
+    proximity.RequiresLineOfSight = false
+    proximity.KeyboardKeyCode = Enum.KeyCode.E -- §1: "E — Take Rusty Rod"
+    proximity.Parent = part
+    proximity:SetAttribute("HostId", spec.attributes and spec.attributes.PromptId or spec.name)
+    local hostId = spec.attributes and spec.attributes.PromptId
+    if hostId ~= nil then
+        promptById[hostId] = proximity
+    end
+end
+
+local function applyBillboard(part: any, spec: PartSpec)
+    if spec.billboard == nil then
+        return
+    end
+    local gui: any = Instance.new("BillboardGui")
+    gui.Name = "Sign"
+    gui.Size = UDim2.fromScale(14, 3.5)
+    gui.StudsOffsetWorldSpace = Vector3.new(0, 2.5, 0)
+    local label: any = Instance.new("TextLabel")
+    label.Name = "Text"
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.fromScale(1, 1)
+    label.Font = Enum.Font.GothamBold
+    label.TextScaled = true
+    label.TextColor3 = spec.billboard.color or Color3.fromRGB(255, 255, 255)
+    label.Text = spec.billboard.text or ""
+    label.Parent = gui
+    gui.Parent = part
+end
+
+--- Creates the world. Safe to call repeatedly: every folder it owns is cleared first, so a
+--- server restart or a second call rebuilds rather than duplicating (and the part count is
+--- identical every time).
+function WorldService:Build(): { [string]: any }
+    local startedAt = os.clock()
+    local layout = self:GetLayout()
+
+    local rootInstance = Workspace:FindFirstChild(ROOT_NAME)
+    if rootInstance == nil then
+        local created: any = Instance.new("Folder")
+        created.Name = ROOT_NAME
+        created.Parent = Workspace
+        rootInstance = created
+    end
+    local root: any = rootInstance
+
+    local world = folderAt(root, WORLD_FOLDER)
+    local water = folderAt(root, WATER_FOLDER)
+    local spawns = folderAt(root, SPAWNS_FOLDER)
+
+    -- Idempotency: drop everything this service owns, then rebuild it. Fish/ is untouched.
+    clearChildren(world)
+    clearChildren(water)
+    clearChildren(spawns)
+    promptById = {}
+
+    for _, path in layout.folders do
+        folderAt(root, path)
+    end
+
+    local byKey: { [string]: any } = {}
+    local counts: { [string]: number } = {}
+    for _, spec in layout.parts do
+        local part: any = Instance.new(spec.class or "Part")
+        part.Name = spec.name
+
+        if spec.shape ~= nil and part:IsA("Part") then
+            part.Shape = spec.shape
+        end
+
+        local collide = spec.collide
+        if collide == nil then
+            collide = not spec.decor
+        end
+        local query = spec.query
+        if query == nil then
+            query = not spec.decor
+        end
+
+        part.Anchored = true
+        part.CanCollide = collide
+        part.CanQuery = query
+        part.CanTouch = false -- nothing in the game watches Touched on world geometry
+        part.CastShadow = not spec.decor
+        part.Material = spec.material
+        part.Color = spec.color
+        part.Transparency = spec.transparency
+        part.TopSurface = Enum.SurfaceType.Smooth
+        part.BottomSurface = Enum.SurfaceType.Smooth
+        part.Size = spec.size
+        part.CFrame = spec.cf
+
+        for key, value in spec.props or {} do
+            part[key] = value
+        end
+        for key, value in spec.attributes or {} do
+            part:SetAttribute(key, value)
+        end
+        if spec.light ~= nil then
+            local light: any = Instance.new("PointLight")
+            light.Name = "Glow"
+            light.Color = spec.light.color
+            light.Brightness = spec.light.brightness
+            light.Range = spec.light.range
+            light.Shadows = false
+            light.Parent = part
+        end
+        applyPrompt(part, spec)
+        applyBillboard(part, spec)
+
+        part.Parent = folderAt(root, spec.parent)
+        byKey[("%s/%s"):format(spec.parent, spec.name)] = part
+
+        local group = spec.parent:match("^World/([^/]+)") or spec.parent:match("^([^/]+)")
+        if group ~= nil then
+            counts[group] = (counts[group] or 0) + 1
+        end
+    end
+
+    -- Spawn anchors: Attachments on their species' host part (§4.6). Attachments cannot be
+    -- rendered, which is exactly why Appendix A asks for them instead of Parts.
+    local anchorCounts: { [string]: number } = {}
+    for _, anchor in layout.anchors do
+        local host = byKey[("%s/%s"):format(anchor.hostParent, anchor.host)]
+        if host ~= nil then
+            local attachment: any = Instance.new("Attachment")
+            attachment.Name = anchor.name
+            attachment.Position = anchor.position
+            for key, value in anchor.attributes do
+                attachment:SetAttribute(key, value)
+            end
+            attachment.Parent = host
+            local species = anchor.attributes.Species
+            anchorCounts[species] = (anchorCounts[species] or 0) + 1
+        end
+    end
+
+    -- Water: §3.0 — one Terrain fill and nothing else. Cleared first so re-running cannot
+    -- stack two volumes.
+    local terrain: any = Workspace.Terrain
+    local centre = self:WaterCentre()
+    terrain:FillBlock(CFrame.new(centre), layout.water.size, Enum.Material.Air)
+    terrain:FillBlock(CFrame.new(centre), layout.water.size, Enum.Material.Water)
+
+    local total = 0
+    for _, count in counts do
+        total += count
+    end
+
+    local report = {
+        parts = total,
+        counts = counts,
+        anchors = anchorCounts,
+        seconds = os.clock() - startedAt,
+        problems = self:ValidateLayout(layout),
+    }
+    lastReport = report
+    return report
+end
+
+--- The centre of the §3.0 water volume.
+function WorldService:WaterCentre(): Vector3
+    local region = ZoneConfig.WaterRegion
+    return Vector3.new(
+        (region.minX + region.maxX) / 2,
+        (region.topY + region.bottomY) / 2,
+        (region.minZ + region.maxZ) / 2
+    )
+end
+
+-- ============================================================================
+-- Public server API
+-- ============================================================================
+
+--- Which zone a world position sits in ("Shallows" | "Shelf" | nil between them, §3.1).
 function WorldService:GetZoneAt(position: Vector3): string?
-    -- TODO(§3.1): test ZoneConfig.Zones[*].footprint.
+    for id, zone in ZoneConfig.Zones do
+        local footprint = zone.footprint
+        if
+            position.X >= footprint.minX
+            and position.X <= footprint.maxX
+            and position.Z >= footprint.minZ
+            and position.Z <= footprint.maxZ
+        then
+            return id
+        end
+    end
     return nil
 end
 
 --- Which zone a depth belongs to, using ZoneConfig.DepthBand (§3, Appendix C).
+--- Depth is positive studs below sea level. The two playable zones have disjoint bands
+--- (Shallows 0-85, Shelf 100-215), so they are tested first and the Rim — the transition
+--- band that deliberately overlaps both — is only reported when neither zone band matches.
 function WorldService:GetZoneForDepth(depthStuds: number): string?
-    -- TODO: compare against ZoneConfig.DepthBand.
+    for id, zone in ZoneConfig.Zones do
+        local band = zone.depthBand
+        if depthStuds >= -band.top and depthStuds <= -band.bottom then
+            return id
+        end
+    end
+    local rim = ZoneConfig.DepthBand.Rim
+    if depthStuds >= -rim.top and depthStuds <= -rim.bottom then
+        return "Rim"
+    end
     return nil
 end
 
 --- A named interaction point from ZoneConfig.InteractionPoints ("RodRack", "TideTrader",
---- "PlayerSpawn").
+--- "DiveMarker", "PlayerSpawn").
 function WorldService:GetInteractionPoint(name: string): Vector3?
     return ZoneConfig.InteractionPoints[name]
 end
@@ -17268,31 +19005,98 @@ function WorldService:GetSpawnPosition(): Vector3
     return ZoneConfig.InteractionPoints.PlayerSpawn
 end
 
---- §9: announce a zone entry — fires ZoneChanged and the 3 s top-centre banner
---- (ZoneConfig.ZoneEntryBannerSeconds), first entry only per player.
-function WorldService:AnnounceZone(player: Player, zoneId: string) end
-
---- §1 steps 2, 3 and 8: wire the ProximityPrompts on the Rod Rack, the dive marker and the
---- Tide Trader stall. Hosts are looked up by name under Workspace.DeepTide.Spawns, with
---- LandmarkConfig.PromptHosts as the fallback positions.
-function WorldService:WirePrompts()
-    -- TODO(§1): RodRack -> "E — Take Rusty Rod"; TideTrader -> "E — Trade";
-    -- dive marker -> the DIVE HERE marker referenced by §1 step 3.
+--- Total parts in the built world (World + Water + Spawns; fish excluded).
+function WorldService:GetPartCount(): number
+    local report = lastReport
+    return if report ~= nil then report.parts else 0
 end
 
--- Client surface -------------------------------------------------------------
+--- The species' spawn-anchor folder (Workspace.DeepTide.Spawns.<species>, §4.6). FishService
+--- reads the Attachments inside; nothing here spawns fish.
+function WorldService:GetAnchorFolder(species: string): Instance?
+    local root = Workspace:FindFirstChild(ROOT_NAME)
+    if root == nil then
+        return nil
+    end
+    local spawns = root:FindFirstChild(SPAWNS_FOLDER)
+    if spawns == nil then
+        return nil
+    end
+    return spawns:FindFirstChild(species)
+end
+
+--- The ProximityPrompt a service wires its verb to (§1 steps 2, 3, 8). The prompt instance
+--- exists from Build() on; connecting `.Triggered` is the owning service's job.
+function WorldService:GetPrompt(id: string): ProximityPrompt?
+    return promptById[id]
+end
+
+--- §9: announce a zone entry — fires ZoneChanged and the 3 s top-centre banner
+--- (ZoneConfig.ZoneEntryBannerSeconds), first entry only per player.
+function WorldService:AnnounceZone(player: Player, zoneId: string)
+    -- TODO(§9): first-entry-per-player bookkeeping + Remotes.ZoneChanged, and the banner
+    -- itself is the HUD's. Owned by the gameplay pass.
+end
+
+--- §1 steps 2, 3 and 8: the ProximityPrompts on the Rod Rack, the dive marker and the Tide
+--- Trader already exist from Build(); this is where their `.Triggered` connections go once
+--- the services that own the verbs exist. Returns the prompts it can see.
+function WorldService:WirePrompts(): { [string]: ProximityPrompt? }
+    local found: { [string]: ProximityPrompt? } = {}
+    for _, host in LandmarkConfig.PromptHosts do
+        found[host.id] = promptById[host.id]
+        -- TODO(§1): RodRack -> "Take Rusty Rod" (FishingService); TideTrader -> "Trade"
+        -- (ShopService); DiveMarker -> §1 step 3's dive hint.
+    end
+    return found
+end
+
+--- Human-readable one-liner for the boot output / the lead's status checks.
+function WorldService:SummaryLine(): string
+    local report = lastReport
+    if report == nil then
+        return "world: not built"
+    end
+    local counts = report.counts
+    local anchorTotal = 0
+    for _, count in report.anchors do
+        anchorTotal += count
+    end
+    return ("world built in %d ms — %d parts (Shallows %d, Rim %d, Shelf %d) + Spawns %d, Water %d · %d spawn anchors · %d layout problems"):format(
+        math.floor(report.seconds * 1000 + 0.5),
+        report.parts,
+        counts.Shallows or 0,
+        counts.Rim or 0,
+        counts.Shelf or 0,
+        counts.Spawns or 0,
+        counts.Water or 0,
+        anchorTotal,
+        #report.problems
+    )
+end
+
+-- ============================================================================
+-- Client surface
+-- ============================================================================
 
 function WorldService.Client:GetInteractionPoint(name: string): Vector3?
     return self.Server:GetInteractionPoint(name)
 end
 
--- Knit lifecycle --------------------------------------------------------------
+-- ============================================================================
+-- Knit lifecycle
+-- ============================================================================
 
-function WorldService:KnitInit() end
+function WorldService:KnitInit()
+    local report = self:Build()
+    for _, problem in report.problems do
+        warn("[Deep Tide] world: " .. problem)
+    end
+end
 
 function WorldService:KnitStart()
-    -- TODO(§1, §9): WirePrompts() once the world is present, and start the zone-entry
-    -- check that drives AnnounceZone.
+    self:WirePrompts()
+    print("[Deep Tide] " .. self:SummaryLine())
 end
 
 return WorldService
@@ -17885,48 +19689,27 @@ return ShopController
         <Properties>
           <string name="Name">Spawns</string>
         </Properties>
-        <Item class="SpawnLocation" referent="136">
-          <Properties>
-            <string name="Name">SpawnLocation</string>
-            <bool name="Anchored">true</bool>
-            <bool name="CanCollide">true</bool>
-            <Color3uint8 name="Color3uint8">16777215</Color3uint8>
-            <int name="Duration">0</int>
-            <token name="Material">512</token>
-            <bool name="Neutral">true</bool>
-            <Vector3 name="Position">
-              <X>0</X>
-              <Y>7.5</Y>
-              <Z>-20</Z>
-            </Vector3>
-            <Vector3 name="size">
-              <X>12</X>
-              <Y>1</Y>
-              <Z>12</Z>
-            </Vector3>
-          </Properties>
-        </Item>
       </Item>
-      <Item class="Folder" referent="137">
+      <Item class="Folder" referent="136">
         <Properties>
           <string name="Name">Water</string>
         </Properties>
       </Item>
-      <Item class="Folder" referent="138">
+      <Item class="Folder" referent="137">
         <Properties>
           <string name="Name">World</string>
         </Properties>
-        <Item class="Folder" referent="139">
+        <Item class="Folder" referent="138">
           <Properties>
             <string name="Name">Rim</string>
           </Properties>
         </Item>
-        <Item class="Folder" referent="140">
+        <Item class="Folder" referent="139">
           <Properties>
             <string name="Name">Shallows</string>
           </Properties>
         </Item>
-        <Item class="Folder" referent="141">
+        <Item class="Folder" referent="140">
           <Properties>
             <string name="Name">Shelf</string>
           </Properties>
