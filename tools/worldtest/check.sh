@@ -18,6 +18,9 @@ patch() { # patch <file> -> stdout, with instance requires redirected to the stu
     sed -e 's/require(ReplicatedStorage\.Packages\.Knit)/__KnitStub/' \
         -e 's/require(ReplicatedStorage\.DeepTide\.Config\.\([A-Za-z]*\))/__config("\1")/' \
         -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Types)/__config("Types")/' \
+        -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Rng)/__Rng/' \
+        -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Tension)/__Tension/' \
+        -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Remotes)/__Remotes/' \
         -e 's/require(script\.Parent\.Parent\.Modules\.PlayerStore)/PlayerStoreModule/' \
         "$1"
 }
@@ -86,10 +89,45 @@ run_config() {
     "$LUAU" "$out"
 }
 
+run_fish() {
+    local out=/tmp/deep-tide-fishtest.luau
+    {
+        cat stub.luau
+        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig
+        echo "__CFG_SOURCES.Types = function()"
+        cat "$REPO/src/shared/Modules/Types.luau"
+        echo "end"
+        echo "local WorldService = (function()"
+        patch "$REPO/src/server/Services/WorldService.luau"
+        echo "end)()"
+        echo "__Rng = (function()"
+        cat "$REPO/src/shared/Modules/Rng.luau"
+        echo "end)()"
+        echo "__Tension = (function()"
+        patch "$REPO/src/shared/Modules/Tension.luau"
+        echo "end)()"
+        echo "__Remotes = (function()"
+        cat "$REPO/src/shared/Modules/Remotes.luau"
+        echo "end)()"
+        echo "local PlayerStoreModule = (function()"
+        patch "$REPO/src/server/Modules/PlayerStore.luau"
+        echo "end)()"
+        for service in PlayerService GearService InventoryService DiveService FishService FishingService; do
+            echo "local $service = (function()"
+            patch "$REPO/src/server/Services/$service.luau"
+            echo "end)()"
+        done
+        cat fish_harness.luau
+    } > "$out"
+    echo "--- fishing loop suite ---"
+    "$LUAU" "$out"
+}
+
 case "$WHICH" in
     world) run_world ;;
     persist) run_persist ;;
     config) run_config ;;
-    all) run_world; run_persist; run_config ;;
-    *) echo "usage: check.sh [world|persist|config|all]" >&2; exit 2 ;;
+    fish) run_fish ;;
+    all) run_world; run_persist; run_config; run_fish ;;
+    *) echo "usage: check.sh [world|persist|config|fish|all]" >&2; exit 2 ;;
 esac

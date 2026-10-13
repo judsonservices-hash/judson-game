@@ -1,19 +1,19 @@
 --!strict
 --[[
-	Deep Tide — FishConfig
-	Source: GDD §4.2 (species table), §4.1 (rarity ladder), §4.3 (behaviour specs),
-	        §4.5 (spawn behaviour), §5.5 (mini-game tuning), Appendix B (canonical field shape).
+    Deep Tide — FishConfig
+    Source: GDD §4.2 (species table), §4.1 (rarity ladder), §4.3 (behaviour specs),
+            §4.5 (spawn behaviour), §5.5 (mini-game tuning), Appendix B (canonical field shape).
 
-	PURE DATA. No logic, no derived values, no tuning number anywhere else in the codebase.
+    PURE DATA. No logic, no derived values, no tuning number anywhere else in the codebase.
 
-	Per species:
-	  value         Coins paid by SELL ALL (§6.2)
-	  depthBand     { shallow, deep } in studs — a species never spawns outside its band (§4.5)
-	  liveAtStart   live population at server start (Appendix C: 48/10/6/7/3 = 79)
-	  parts         primitives per fish (Appendix C: 1, Eel 2)
-	  mini          every input to the Tension mini-game (§5.3 / §5.5) — FishingService reads it
-	  behaviourCfg  every input to the behaviour state machine (§4.3) — FishService reads it
-	  strainMult by rarity lives in RarityConfig.StrainMult (§4.1) — §5.5's per-species column repeats it.
+    Per species:
+      value         Coins paid by SELL ALL (§6.2)
+      depthBand     { shallow, deep } in studs — a species never spawns outside its band (§4.5)
+      liveAtStart   live population at server start (Appendix C: 48/10/6/7/3 = 79)
+      parts         primitives per fish (Appendix C: 1, Eel 2)
+      mini          every input to the Tension mini-game (§5.3 / §5.5) — FishingService reads it
+      behaviourCfg  every input to the behaviour state machine (§4.3) — FishService reads it
+      strainMult by rarity lives in RarityConfig.StrainMult (§4.1) — §5.5's per-species column repeats it.
 ]]
 
 local FishConfig = {}
@@ -28,13 +28,20 @@ FishConfig.TotalLiveAtServerStart = 74
 
 -- Rules that apply to every species (§4.5).
 FishConfig.SpawnRules = {
-	RespawnSeconds = 15,           -- a caught or despawned fish returns to its home node after 15 s
-	MaxSpawnsPerBurst = 1,         -- a spawner never spawns more than 1 fish per...
+	RespawnSeconds = 15, -- a caught or despawned fish returns to its home node after 15 s
+	MaxSpawnsPerBurst = 1, -- a spawner never spawns more than 1 fish per...
 	SpawnBurstIntervalSeconds = 3, -- ...3 s (prevents a wall of fish appearing after a wipe)
-	DespawnPlayerDistance = 400,   -- despawns (without value) if further than 400 studs...
-	DespawnAfterSeconds = 20,      -- ...from any player for 20 s
-	MovementHz = 20,               -- server-authoritative repositioning rate; clients interpolate (§4.3)
+	DespawnPlayerDistance = 400, -- despawns (without value) if further than 400 studs...
+	DespawnAfterSeconds = 20, -- ...from any player for 20 s
+	MovementHz = 20, -- server-authoritative repositioning rate; clients interpolate (§4.3)
 	NeverShallowerThanStuds = 110, -- no Shelf fish can ever be found above 110 studs (§4.5)
+	-- §4.3 is built from "random" values (anchor walks, orbit phases, scatter, jitter). They are
+	-- all drawn from one seeded generator so a run is reproducible: the same seed spawns the same
+	-- fish, swims the same paths and produces the same fights twice (tools/worldtest/fish_harness).
+	RandomSeed = 20261013,
+	-- A stalled frame (a server hitch, a Studio breakpoint) must not teleport every fish: the
+	-- movement loop clamps a step to this many seconds before advancing anything.
+	MaxStepSeconds = 0.25,
 }
 
 FishConfig.Species = {
@@ -90,7 +97,7 @@ FishConfig.Species = {
 		color = Color3.fromRGB(232, 140, 86),
 		material = Enum.Material.SmoothPlastic,
 		transparency = 0,
-		visualCue = "Chunky rounded brick, wide and slow, orange — reads as \"fat and worth it\".",
+		visualCue = 'Chunky rounded brick, wide and slow, orange — reads as "fat and worth it".',
 		mini = {
 			zoneHalfWidth = 0.17,
 			zoneHz = 0.35,

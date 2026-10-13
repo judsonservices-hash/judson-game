@@ -15,9 +15,9 @@ local Types = require(ReplicatedStorage.DeepTide.Modules.Types)
 local Remotes = require(ReplicatedStorage.DeepTide.Modules.Remotes)
 local EconomyConfig = require(ReplicatedStorage.DeepTide.Config.EconomyConfig)
 
-local ShopController = Knit.CreateController {
+local ShopController = Knit.CreateController({
 	Name = "ShopController",
-}
+})
 
 local remotes: { [string]: RemoteEvent } = {}
 local shopState: Types.ShopState = {
