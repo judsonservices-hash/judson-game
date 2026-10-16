@@ -714,15 +714,24 @@ check(
 )
 
 -- Every species lands with a competent player and the right rod.
+-- The third column is the dive gear the row is fought in. Four of the five species live in the
+-- Shallows, where the §6.1 Rubber Lungs (rating 90) are enough. The Lantern Eel lives only in the
+-- Shelf (depthBand 115-175, §4.2), so standing at the eel's depth needs the Reinforced Tank's 240
+-- rating -- without it the §5.4/§11 auto-surface fires mid-cast and the cast aborts, which is the
+-- tank gate doing its job, not the rod gate under test. §6.5 puts the tank first and the Brass Rod
+-- ~2 Shelf dives later, so the gear a player actually holds the first time an eel is reachable is
+-- exactly this: Reinforced Tank + Rusty Rod. This row asserts the §5.4 rod gate (a Rare fish on a
+-- Rare-cap rod), so it dives in that real starting-Shelf kit.
 local perSpecies = {
-	{ "SilverSardine", "RustyRod" },
-	{ "SunsetGrouper", "RustyRod" },
-	{ "ReefBass", "RustyRod" },
-	{ "LanternEel", "RustyRod" },
+	{ "SilverSardine", "RustyRod", "RubberLungs" },
+	{ "SunsetGrouper", "RustyRod", "RubberLungs" },
+	{ "ReefBass", "RustyRod", "RubberLungs" },
+	{ "LanternEel", "RustyRod", "ReinforcedTank" },
 }
 for _, row in perSpecies do
-	local speciesId, rodId = row[1], row[2]
+	local speciesId, rodId, gearId = row[1], row[2], row[3]
 	GearService:SetEquippedRod(bob, rodId)
+	GearService:SetEquippedGear(bob, gearId)
 	local result = attemptCatch(bob, speciesId, { driver = makeDriver(2) })
 	local ideal = Tension.bareMinimumSeconds(CFG.Fish.Species[speciesId], CFG.Rod.Rods[rodId])
 	local realTarget = CFG.Economy.FightTimeSeconds[speciesId]
@@ -748,10 +757,24 @@ for _, row in perSpecies do
 	)
 end
 
+-- The §6.2 sum for everything banked so far: the two Sardines of section 3, plus one of each of
+-- the four rows above (Sardine, Grouper, Bass, Eel). Three Sardines, not two -- the Sardine row of
+-- the loop above is itself asserted to land, so leaving it out of this sum would assert a total the
+-- harness has just proved wrong. 3x15 + 40 + 90 + 260 = 435 C.
 check(
-	InventoryService:GetTotalCoins(bob) == 15 * 2 + 40 + 90 + 260,
+	InventoryService:GetTotalCoins(bob) == 15 * 3 + 40 + 90 + 260,
 	("Catch Log total is the §6.2 sum (%d C)"):format(InventoryService:GetTotalCoins(bob))
 )
+
+-- Surface and go back to the §6.1 starting kit. Every section below is written against a rating-90
+-- diver on a 100 s tank who is not standing in the Shelf: the Ghost Ray attempt of §4 is resolved
+-- inside the 1.5 s the rating warning takes to fire, the oxygen clock of §6 reads the 100 s tank,
+-- and §4.5's 400-stud guard needs the Shelf herd out of range of the player. Leaving the diver at
+-- eel depth on eel gear would fail all three for reasons that have nothing to do with what they
+-- assert, exactly as standing there on eel gear is impossible in play without the tank.
+GearService:SetEquippedGear(bob, "RubberLungs")
+__movePlayer(bob, Vector3.new(0, 8, -20), math.pi)
+advance(1)
 
 -- ============================================================================
 section("4. THE ROD GATE (§5.4: never a dice roll)")
@@ -867,12 +890,17 @@ local capFight = Tension.newFight(CFG.Fish.Species.SunsetGrouper, CFG.Rod.Rods.R
 capFight.zoneCentre = 1
 capFight.zoneHalfWidth = 0.6
 capFight.hold = CFG.Fight.HoldMeterMax * 0.5
+-- The needle starts *on* the cap, as this fixture's own comment describes ("the needle pinned at
+-- the cap"). Letting it climb from its §5.3 NeedleStart instead measures the climb *plus* the
+-- hold, which is a different quantity: the assertion is about SnapHoldTime alone.
+capFight.needle = capFight.tensionMax
 local capRng = Rng.new(CFG.Fight.RandomSeed)
 local capOutcome, capClock = nil, 0
 while capClock < 3 and capOutcome == nil do
 	capClock += STEP
 	capFight.zoneCentre = 1
 	capFight.zoneHalfWidth = 0.6
+	capFight.needle = capFight.tensionMax
 	capOutcome = Tension.step(capFight, STEP, true, capRng)
 end
 check(capOutcome == "Snapped", ("holding at the over-tension line snaps the line (%s)"):format(tostring(capOutcome)))
