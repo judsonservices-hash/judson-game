@@ -153,8 +153,18 @@ function DiveService:ForceSurface(player: Player, kind: string)
         local character = player.Character
         local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
         local target = Vector3.new(position.X, DiveConfig.SeaLevelY + DiveConfig.ForceSurfaceHeightStuds, position.Z)
+        -- The ascent moves the player; it must not turn them. `CFrame.new(target)` carries the
+        -- identity rotation, so writing it straight to the root snapped the avatar's facing to
+        -- world -Z — a 180 deg flip for a diver swimming +Z, which is the direction the whole loop
+        -- faces — and the swim/run controller then visibly swung the rig back. Keep the yaw the
+        -- character already has (the root's LookVector is what a rig reports, in game and in rigs).
+        local yaw = 0
         if root ~= nil then
-            (root :: BasePart).CFrame = CFrame.new(target)
+            local facing = (root :: BasePart).CFrame.LookVector
+            yaw = math.atan2(-facing.X, -facing.Z)
+        end
+        if root ~= nil then
+            (root :: BasePart).CFrame = CFrame.new(target) * CFrame.Angles(0, yaw, 0)
         end
         -- §3.0 reads depth at the head, so the head lands on the surface with the root. Roblox
         -- welds the head to the root and does this by itself; saying it explicitly keeps the
@@ -163,6 +173,7 @@ function DiveService:ForceSurface(player: Player, kind: string)
         local head = if character ~= nil then character:FindFirstChild("Head") else nil
         if head ~= nil then
             (head :: BasePart).CFrame = CFrame.new(target + Vector3.new(0, HEAD_OFFSET_STUDS, 0))
+                * CFrame.Angles(0, yaw, 0)
         end
     end
 

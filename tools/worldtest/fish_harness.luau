@@ -1016,6 +1016,30 @@ check(
 	("the surfacing is announced: %s"):format(tostring(CFG.Dive.ForceSurfaceMessages.outOfAir))
 )
 
+-- A forced ascent moves the player; it must not turn them. `CFrame.new(target)` carries the
+-- identity rotation, so writing it straight to the root reset the avatar's facing to world -Z —
+-- a 180 deg turn for a diver swimming +Z, which is the direction the whole loop faces — and the
+-- swim controller then swung the rig back, which is what a player sees as the avatar flipping.
+-- Re-asked here with the diver facing +Z (the yaw of the spawn pad itself), because the run above
+-- happens to have been facing -Z already, where the old code was accidentally correct.
+DiveService:RefillAir(bob)
+__movePlayer(bob, Vector3.new(-100, -115, -110), math.pi)
+check(
+	math.abs((rootOf(bob).CFrame.ry or 0) - math.pi) < 1e-3,
+	"the diver is set up facing +Z (yaw pi) before the forced ascent"
+)
+DiveService:DrainAir(bob, CFG.Gear.Gear.RubberLungs.airCapacity)
+check(
+	math.abs(rootOf(bob).Position.Y - (CFG.Dive.SeaLevelY + CFG.Dive.ForceSurfaceHeightStuds)) < 0.01,
+	"the tank empties and the diver is surfaced again"
+)
+check(
+	math.abs((rootOf(bob).CFrame.ry or 0) - math.pi) < 1e-3,
+	("a forced ascent keeps the diver's heading, it does not flip them to face -Z (yaw %.2f)"):format(
+		rootOf(bob).CFrame.ry or 0
+	)
+)
+
 -- The depth-rating wall: at rating + margin for the hold time, the same thing happens (§5.4, §11).
 DiveService:RefillAir(bob)
 __movePlayer(

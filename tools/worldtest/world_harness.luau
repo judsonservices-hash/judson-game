@@ -243,6 +243,205 @@ if spawn then
     check(math.abs((spawn.CFrame.ry or 0) - math.pi) < 0.001, "SpawnLocation yawed 180 deg so the character faces +Z")
 end
 
+print("=== 4b. THE SPAWN COLUMN (a character is never created inside geometry) ===")
+-- §11 step 1: the player is created standing on ZoneConfig.InteractionPoints.PlayerSpawn, and the
+-- pad that carries them is a part in this layout. Roblox does not refuse a character that exists
+-- inside an anchored part: it depenetrates the rig, and a rig being depenetrated is what an avatar
+-- that tumbles or flips the moment the place is played actually is. Every world part is anchored,
+-- so dressing placed in the spawn column is the only way the world can do this — and the blockout
+-- shipped exactly that: L1's light tower at the GDD's own (0, 20, -22), 4 x 4, whose footprint and
+-- Y 8 base plane land on the spawn point. Every assertion in this file passed anyway, because none
+-- of them asked what was standing where the player stands. These do.
+--
+-- Bounds are computed here rather than read from WorldService, so the check is independent of the
+-- rule it guards: a rig may read the layout's own rx/ry/rz, which the built CFrame cannot.
+local function rotateByEuler(v, rx, ry, rz)
+    local cx, sx = math.cos(rx), math.sin(rx)
+    local cy, sy = math.cos(ry), math.sin(ry)
+    local cz, sz = math.cos(rz), math.sin(rz)
+    local m = {
+        { cy * cz, -cy * sz, sy },
+        { cx * sz + sx * sy * cz, cx * cz - sx * sy * sz, -sx * cy },
+        { sx * sz - cx * sy * cz, sx * cz + cx * sy * sz, cx * cy },
+    }
+    return Vector3.new(
+        m[1][1] * v.X + m[1][2] * v.Y + m[1][3] * v.Z,
+        m[2][1] * v.X + m[2][2] * v.Y + m[2][3] * v.Z,
+        m[3][1] * v.X + m[3][2] * v.Y + m[3][3] * v.Z
+    )
+end
+
+--- The axis-aligned box a rotated part occupies, as an exact corner sweep.
+local function boundsOf(spec)
+    local half = spec.size / 2
+    local min = { X = math.huge, Y = math.huge, Z = math.huge }
+    local max = { X = -math.huge, Y = -math.huge, Z = -math.huge }
+    local cf = spec.cf
+    for _, sx in ipairs({ -1, 1 }) do
+        for _, sy in ipairs({ -1, 1 }) do
+            for _, sz in ipairs({ -1, 1 }) do
+                local corner = rotateByEuler(
+                    Vector3.new(half.X * sx, half.Y * sy, half.Z * sz),
+                    cf.rx or 0,
+                    cf.ry or 0,
+                    cf.rz or 0
+                )
+                local p = cf.Position + corner
+                min.X = math.min(min.X, p.X)
+                min.Y = math.min(min.Y, p.Y)
+                min.Z = math.min(min.Z, p.Z)
+                max.X = math.max(max.X, p.X)
+                max.Y = math.max(max.Y, p.Y)
+                max.Z = math.max(max.Z, p.Z)
+            end
+        end
+    end
+    return min, max
+end
+
+local function boxesOverlap(aMin, aMax, bMin, bMax)
+    return aMin.X < bMax.X
+        and aMax.X > bMin.X
+        and aMin.Y < bMax.Y
+        and aMax.Y > bMin.Y
+        and aMin.Z < bMax.Z
+        and aMax.Z > bMin.Z
+end
+
+local function isSolid(spec)
+    return if spec.collide ~= nil then spec.collide else not spec.decor
+end
+
+-- The row a rig's own body would occupy: a standing character is ~5 studs tall, so anything solid
+-- within 6 studs above the surface it stands on is inside it.
+local RIG_HEIGHT_STUDS = 6
+
+local spawnMin, spawnMax = nil, nil
+local pad = nil
+for _, spec in ipairs(layout.parts) do
+    if spec.name == CFG.Landmark.WorldPropNames.SpawnLocation then
+        pad = spec
+    end
+end
+check(pad ~= nil, "the layout holds the player's SpawnLocation pad")
+if pad ~= nil then
+    spawnMin, spawnMax = boundsOf(pad)
+    local spawnAt = CFG.Zone.InteractionPoints.PlayerSpawn
+    check(
+        math.abs(spawnMax.Y - spawnAt.Y) < 0.01,
+        ("the pad's top surface is the spawn's own feet plane (pad top Y %.2f, PlayerSpawn Y %.2f)"):format(
+            spawnMax.Y,
+            spawnAt.Y
+        )
+    )
+
+    -- The pad's whole 12 x 12 footprint, from its surface to a rig's height above it.
+    local columnMin = Vector3.new(spawnMin.X, spawnMax.Y, spawnMin.Z)
+    local columnMax = Vector3.new(spawnMax.X, spawnMax.Y + RIG_HEIGHT_STUDS, spawnMax.Z)
+    local intruders = {}
+    for _, spec in ipairs(layout.parts) do
+        if spec ~= pad and isSolid(spec) then
+            local min, max = boundsOf(spec)
+            if boxesOverlap(min, max, columnMin, columnMax) then
+                table.insert(intruders, spec.name)
+            end
+        end
+    end
+    check(
+        #intruders == 0,
+        ("nothing solid stands on the spawn pad (found: %s)"):format(
+            if #intruders == 0 then "nothing" else table.concat(intruders, ", ")
+        )
+    )
+
+    -- The character itself, not the pad: a rig is ~3 studs wide and 1-2 deep, and it is created at
+    -- the pad's centre. This is the volume the avatar's body actually occupies.
+    local rigMin = Vector3.new(spawnAt.X - 1.5, spawnMax.Y, spawnAt.Z - 1)
+    local rigMax = Vector3.new(spawnAt.X + 1.5, spawnMax.Y + RIG_HEIGHT_STUDS, spawnAt.Z + 1)
+    local bodyHits = {}
+    for _, spec in ipairs(layout.parts) do
+        if spec ~= pad and isSolid(spec) then
+            local min, max = boundsOf(spec)
+            if boxesOverlap(min, max, rigMin, rigMax) then
+                table.insert(bodyHits, spec.name)
+            end
+        end
+    end
+    check(
+        #bodyHits == 0,
+        ("a rig created at PlayerSpawn occupies empty space (found: %s)"):format(
+            if #bodyHits == 0 then "nothing" else table.concat(bodyHits, ", ")
+        )
+    )
+
+    -- What the character stands on: exactly one flat collidable top under the pad.
+    local supports = {}
+    for _, spec in ipairs(layout.parts) do
+        if spec ~= pad and isSolid(spec) then
+            local min, max = boundsOf(spec)
+            local flat = math.abs(max.Y - spawnMin.Y) < 0.01
+            local under = min.X < spawnMax.X and max.X > spawnMin.X and min.Z < spawnMax.Z and max.Z > spawnMin.Z
+            if flat and under then
+                table.insert(supports, spec.name)
+            end
+        end
+    end
+    check(
+        #supports == 1 and supports[1] == "L1_Deck",
+        ("the spawn stands on exactly one flat top: %s"):format(
+            if #supports == 0 then "nothing" else table.concat(supports, ", ")
+        )
+    )
+end
+
+-- The rule is only worth having if it fires on the geometry that caused the report, so put the
+-- tower back where §3.2 prints it and require the builder to name it.
+local asPrinted = WorldService:GetLayout()
+for _, spec in ipairs(asPrinted.parts) do
+    if spec.name == "L1_LightTower" then
+        spec.cf = CFrame.new(Vector3.new(0, 20, -22))
+    end
+end
+local caught = WorldService:ValidateLayout(asPrinted)
+check(
+    #caught == 1 and (caught[1] or ""):find("L1_LightTower") ~= nil,
+    ("the spawn rule catches the tower at §3.2's (0, 20, -22): %s"):format(caught[1] or "nothing")
+)
+
+-- ...and that the tower is not simply flung off the dock to satisfy it.
+local tower, towerMin, towerMax = nil, nil, nil
+for _, spec in ipairs(layout.parts) do
+    if spec.name == "L1_LightTower" then
+        tower = spec
+        towerMin, towerMax = boundsOf(spec)
+    end
+end
+if tower ~= nil and pad ~= nil and spawnMin ~= nil then
+    local deckMin, deckMax = nil, nil
+    for _, spec in ipairs(layout.parts) do
+        if spec.name == "L1_Deck" then
+            deckMin, deckMax = boundsOf(spec)
+        end
+    end
+    check(
+        deckMin ~= nil
+            and towerMin.X >= deckMin.X
+            and towerMax.X <= deckMax.X
+            and towerMin.Z >= deckMin.Z
+            and towerMax.Z <= deckMax.Z,
+        ("the light tower still stands on the dock (X %.1f..%.1f, Z %.1f..%.1f)"):format(
+            towerMin.X,
+            towerMax.X,
+            towerMin.Z,
+            towerMax.Z
+        )
+    )
+    check(
+        not boxesOverlap(towerMin, towerMax, Vector3.new(spawnMin.X, spawnMax.Y, spawnMin.Z), Vector3.new(spawnMax.X, spawnMax.Y + RIG_HEIGHT_STUDS, spawnMax.Z)),
+        "the light tower is clear of the spawn pad"
+    )
+end
+
 local deck = first.root.World.Shallows.L1:FindFirstChild("L1_Deck")
 check(deck ~= nil and deck.Size.Y == 2 and deck.CFrame.Position.Y == 6, "L1_Deck (60 x 2 x 30) centred Y 6, top at Y 7")
 check(#first.root.World.Shallows.L1:GetChildren() == 8, "L1 holds 8 parts in the world (4 more live in Spawns)")
