@@ -98,9 +98,11 @@ run_fish() {
         echo "__CFG_SOURCES.Types = function()"
         cat "$REPO/src/shared/Modules/Types.luau"
         echo "end"
-        echo "local WorldService = (function()"
-        patch "$REPO/src/server/Services/WorldService.luau"
-        echo "end)()"
+        # The shared modules a service `require`s must be defined BEFORE the service chunk that
+        # captures them, exactly as the real bootstrap requires modules before services. Emitting
+        # WorldService first (as this suite used to) left its `local Remotes = __Remotes` nil, so
+        # its runtime `Remotes.get("ZoneChanged")` threw inside DiveService's pcall and surfaced
+        # only as a warn — a rig artefact, not a game bug. Order matters in every suite here.
         echo "__Rng = (function()"
         cat "$REPO/src/shared/Modules/Rng.luau"
         echo "end)()"
@@ -109,6 +111,9 @@ run_fish() {
         echo "end)()"
         echo "__Remotes = (function()"
         cat "$REPO/src/shared/Modules/Remotes.luau"
+        echo "end)()"
+        echo "local WorldService = (function()"
+        patch "$REPO/src/server/Services/WorldService.luau"
         echo "end)()"
         echo "local PlayerStoreModule = (function()"
         patch "$REPO/src/server/Modules/PlayerStore.luau"

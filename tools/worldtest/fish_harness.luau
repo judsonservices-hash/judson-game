@@ -71,8 +71,38 @@ local STEP = 1 / 60
 -- Helpers
 -- ============================================================================
 
+-- A trap for the one failure this suite cannot otherwise see. DiveService wraps every heartbeat
+-- step in a pcall and `warn`s the message when it throws, so a genuine step failure would leave
+-- the suite green. The stub defines `warn` as a global, so shadowing it here catches that path for
+-- the whole run; section 11 fails if it ever fires. It DID fire — three times — until check.sh
+-- stopped assembling this chunk with WorldService ahead of __Remotes (WorldService's
+-- `local Remotes = __Remotes` captured a nil, so its first §9 zone announcement threw). That was
+-- the rig's ordering bug, not a game bug: with the order fixed the same code path runs for real.
+local stepWarnings = {}
+warn = function(...)
+	local parts = { ... }
+	local text = {}
+	for _, value in parts do
+		table.insert(text, tostring(value))
+	end
+	table.insert(stepWarnings, table.concat(text, " "))
+end
+
+-- The positive half of that proof: WorldService:AnnounceZone pushes a §9 ZoneChanged to the client
+-- and the DiveService step is what triggers it, so counting those pushes at the one place a
+-- heartbeat is fired shows the frame that used to throw now gets all the way through. Counted
+-- here rather than read from the log at the end, because the log is cleared between attempts.
+local zoneAnnouncements = 0
+
 local function tickOnce()
+	local pending = #__remotes()
 	__fireHeartbeat(STEP)
+	local log = __remotes()
+	for index = pending + 1, #log do
+		if log[index].remote == "ZoneChanged" then
+			zoneAnnouncements += 1
+		end
+	end
 end
 
 --- Advances the world by `seconds` of heartbeats, optionally running `onTick(clock)` before each.
@@ -1184,6 +1214,19 @@ check(
 check(InventoryService:GetFishCount(bob) == 3, "three fish in the log, ready for SELL ALL (the next delegation)")
 check(FishService:GetLiveFishCount() >= CFG.Fish.TotalLiveAtServerStart - 3, "the ocean is still stocked after the run")
 
+-- ============================================================================
+section("11. NOTHING WAS SWALLOWED (the §9 zone-entry frame that used to throw)")
+for _, message in stepWarnings do
+	print("        warn: " .. message)
+end
+check(
+	#stepWarnings == 0,
+	("DiveService's heartbeat step never failed once in this run (%d warn(s) captured)"):format(#stepWarnings)
+)
+check(
+	zoneAnnouncements > 0,
+	("and its §9 zone-entry frame got all the way to the client: %d ZoneChanged push(es)"):format(zoneAnnouncements)
+)
 print(("=== FISHING RESULT: %d failure(s) across %d assertions ==="):format(failures, checks))
 if failures > 0 then
 	error("fishing harness failures: " .. failures)

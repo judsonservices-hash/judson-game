@@ -2225,12 +2225,22 @@ end
 
 --- The band a depth *belongs* to (§3.1's three places, plus the chasm floor). A boundary depth
 --- belongs to the deeper band: at 40 studs the water is already Shallows water.
+--- bands[1] (Surface) is the *above-the-waterline* preset — §8.1's bright dock look — and it is
+--- anchored at Y 0 only so the fade down to the first water band starts at the waterline. A depth
+--- below the waterline therefore belongs to water: 10 studs down is Shallows water (§3.0: sea
+--- level = Y 0, and Appendix C puts the whole 0 -> 85 stud band in the Shallows), not "Surface".
 function Atmosphere.BandAt(depthStuds: number): string
     local bands = LightingConfig.Bands
-    local name = bands[1].id
-    for _, band in bands do
-        if depthStuds >= band.depthStuds then
-            name = band.id
+    if depthStuds <= bands[1].depthStuds then
+        return bands[1].id
+    end
+    -- Below the waterline the first water band holds until its own anchor: at 10 studs there is no
+    -- deeper anchor yet, and the shallowest water band is the right answer, not Surface.
+    local shallowestWater = if bands[2] ~= nil then bands[2] else bands[1]
+    local name = shallowestWater.id
+    for index = 2, #bands do
+        if depthStuds >= bands[index].depthStuds then
+            name = bands[index].id
         end
     end
     return name

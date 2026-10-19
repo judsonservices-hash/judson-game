@@ -525,9 +525,12 @@ for _, speciesId in FishConfig.Order do
 end
 
 -- The eel's lure light comes from config too, not from a literal in FishService.
+-- Compared with `isTone`: a Color3's channels are 0-1 floats (120/255 = 0.4706), so a raw
+-- `color.R == 120` can never hold — that check was the harness's bug, not the config's. The
+-- config value itself is §8.6's RGB(120, 255, 190) verbatim.
 local eel = FishConfig.Species.LanternEel
 check(
-    eel.visual.light.color.R == 120 and eel.visual.light.color.G == 255 and eel.visual.light.color.B == 190,
+    isTone(eel.visual.light.color, 120, 255, 190),
     "the Lantern Eel's lure light is §8.6's RGB(120, 255, 190)"
 )
 check(eel.visual.light.brightness == 1.5 and eel.visual.light.range == 14, "at §8.6's Brightness 1.5 / Range 14")
