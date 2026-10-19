@@ -20,6 +20,7 @@ patch() { # patch <file> -> stdout, with instance requires redirected to the stu
         -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Types)/__config("Types")/' \
         -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Rng)/__Rng/' \
         -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Tension)/__Tension/' \
+        -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Atmosphere)/__Atmosphere/' \
         -e 's/require(ReplicatedStorage\.DeepTide\.Modules\.Remotes)/__Remotes/' \
         -e 's/require(script\.Parent\.Parent\.Modules\.PlayerStore)/PlayerStoreModule/' \
         "$1"
@@ -73,7 +74,7 @@ run_config() {
     local out=/tmp/deep-tide-configtest.luau
     {
         cat stub.luau
-        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig
+        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig LightingConfig VisualConfig
         echo "local ConfigsTable = (function()"
         echo "script = makeInstance('ModuleScript')"
         echo "local __modules = makeInstance('Folder')"
@@ -93,7 +94,7 @@ run_fish() {
     local out=/tmp/deep-tide-fishtest.luau
     {
         cat stub.luau
-        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig
+        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig LightingConfig VisualConfig
         echo "__CFG_SOURCES.Types = function()"
         cat "$REPO/src/shared/Modules/Types.luau"
         echo "end"
@@ -130,7 +131,7 @@ run_economy() {
     local out=/tmp/deep-tide-economytest.luau
     {
         cat stub.luau
-        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig
+        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig LightingConfig VisualConfig
         echo "__CFG_SOURCES.Types = function()"
         cat "$REPO/src/shared/Modules/Types.luau"
         echo "end"
@@ -161,12 +162,36 @@ run_economy() {
     "$LUAU" "$out"
 }
 
+run_visual() {
+    local out=/tmp/deep-tide-visualtest.luau
+    {
+        cat stub.luau
+        configs ZoneConfig LandmarkConfig SpawnConfig FishConfig DiveConfig LightingConfig VisualConfig
+        echo "__Atmosphere = (function()"
+        patch "$REPO/src/shared/Modules/Atmosphere.luau"
+        echo "end)()"
+        echo "__Remotes = (function()"
+        cat "$REPO/src/shared/Modules/Remotes.luau"
+        echo "end)()"
+        echo "local WorldService = (function()"
+        patch "$REPO/src/server/Services/WorldService.luau"
+        echo "end)()"
+        echo "local VisualService = (function()"
+        patch "$REPO/src/server/Services/VisualService.luau"
+        echo "end)()"
+        cat visual_harness.luau
+    } > "$out"
+    echo "--- visual + lighting suite (bands / continuity / fog / budget / fish reads) ---"
+    "$LUAU" "$out"
+}
+
 case "$WHICH" in
     world) run_world ;;
     persist) run_persist ;;
     config) run_config ;;
     fish) run_fish ;;
     economy) run_economy ;;
-    all) run_world; run_persist; run_config; run_fish; run_economy ;;
-    *) echo "usage: check.sh [world|persist|config|fish|economy|all]" >&2; exit 2 ;;
+    visual) run_visual ;;
+    all) run_world; run_persist; run_config; run_fish; run_economy; run_visual ;;
+    *) echo "usage: check.sh [world|persist|config|fish|economy|visual|all]" >&2; exit 2 ;;
 esac

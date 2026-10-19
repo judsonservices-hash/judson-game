@@ -37,6 +37,16 @@
     },
     "Workspace": {
       "$className": "Workspace",
+      "Terrain": {
+        "$className": "Terrain",
+        "$properties": {
+          "WaterColor": [58, 132, 148],
+          "WaterTransparency": 0.35,
+          "WaterReflectance": 0.18,
+          "WaterWaveSize": 0.12,
+          "WaterWaveSpeed": 12
+        }
+      },
       "DeepTide": {
         "$className": "Folder",
         "World": {
@@ -59,25 +69,28 @@
         },
         "Spawns": {
           "$className": "Folder"
+        },
+        "Visual": {
+          "$className": "Folder"
         }
       }
     },
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "ClockTime": 17.5
+        "ClockTime": 17.5,
+        "Technology": "ShadowMap",
+        "GlobalShadows": true,
+        "ShadowSoftness": 0.35
       },
-      "Atmosphere": {
-        "$className": "Atmosphere",
-        "$properties": {
-          "Density": 0.38,
-          "Haze": 1.8,
-          "Color": [
-            72,
-            96,
-            110
-          ]
-        }
+      "DeepTideAtmosphere": {
+        "$className": "Atmosphere"
+      },
+      "DeepTideBloom": {
+        "$className": "BloomEffect"
+      },
+      "DeepTideGrade": {
+        "$className": "ColorCorrectionEffect"
       }
     }
   }
