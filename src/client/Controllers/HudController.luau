@@ -140,7 +140,11 @@ local function buildGui(): ScreenGui
 	)
 	fightLabel.TextXAlignment = Enum.TextXAlignment.Center
 
-	messageLabel = newLabel(screen, "Message", UDim2.fromOffset(560, 30), UDim2.new(0.5, -280, 0.38, 0), "")
+	-- §9: the explainer line. Wide enough for the longest line the server can push — the §5.4
+	-- rating wall prints the player's own rating *and* the tier that opens the deeper water
+	-- ("GEAR RATING EXCEEDED — RATING 90m — SURFACED · REINFORCED TANK 240m (280 C)").
+	messageLabel = newLabel(screen, "Message", UDim2.fromOffset(1040, 30), UDim2.new(0.5, -520, 0.38, 0), "")
+	messageLabel.TextSize = 16
 	messageLabel.TextXAlignment = Enum.TextXAlignment.Center
 	messageLabel.Visible = false
 

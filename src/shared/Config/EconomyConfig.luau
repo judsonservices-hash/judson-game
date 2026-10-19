@@ -1,13 +1,13 @@
 --!strict
 --[[
-	Deep Tide — EconomyConfig
-	Source: GDD §6.1 (starting state), §6.2 (sell values), §6.3 (the three shop SKUs),
-	        §6.4 (first-upgrade maths), §6.5 (target times), §6.6 (the disabled Robux tab),
-	        Appendix B ("EconomyConfig").
-	PURE DATA. Coins are integers only.
+    Deep Tide — EconomyConfig
+    Source: GDD §6.1 (starting state), §6.2 (sell values), §6.3 (the three shop SKUs),
+            §6.4 (first-upgrade maths), §6.5 (target times), §6.6 (the disabled Robux tab),
+            Appendix B ("EconomyConfig").
+    PURE DATA. Coins are integers only.
 
-	SellValues repeats FishConfig.Species[x].value on purpose — the economy table has to be
-	readable in one place. Modules/ConfigCheck asserts the two never drift apart.
+    SellValues repeats FishConfig.Species[x].value on purpose — the economy table has to be
+    readable in one place. Modules/ConfigCheck asserts the two never drift apart.
 ]]
 
 local EconomyConfig = {}
@@ -17,7 +17,7 @@ EconomyConfig.StartingCoins = 0
 EconomyConfig.StartingRodId = "RustyRod"
 EconomyConfig.StartingGearId = "RubberLungs"
 EconomyConfig.CatchLogIsUnlimited = true -- slice inventory has no cap
-EconomyConfig.SellAllEnabled = true      -- no haggling, no price fluctuation, no sell cooldown
+EconomyConfig.SellAllEnabled = true -- no haggling, no price fluctuation, no sell cooldown
 
 -- Sell values in Coins (§6.2).
 EconomyConfig.SellValues = {
@@ -104,5 +104,39 @@ EconomyConfig.TuningAlarm = {
 
 -- §11: no single dive may produce more than this in the Shallows.
 EconomyConfig.MaxShallowsDiveCoins = 700
+
+-- ---------------------------------------------------------------------------
+-- Transaction feedback (§9: "never a loss without a reason and a next step";
+-- a purchase refusal always says why). Only the wordings live here — every
+-- number they print is read from the fish/rod/gear tables at the moment of use.
+-- ---------------------------------------------------------------------------
+EconomyConfig.SellAllMessage = {
+	soldFormat = "SOLD %d FISH — +%d C", -- params: fish sold, coins earned
+	emptyFormat = "NOTHING TO SELL — CATCH SOMETHING FIRST",
+	seconds = 2,
+}
+
+EconomyConfig.PurchaseMessage = {
+	-- §6.3: the row's own truth said back — a tank reports its rating and air, a rod reports
+	-- the fish it unlocks. Parameters come from GearConfig / RodConfig, never from here.
+	gearFormat = "%s EQUIPPED — RATING %dm · AIR %ds",
+	rodFormat = "%s EQUIPPED — %s", -- params: rod name, Shop[sku].unlockLabel
+	seconds = 3,
+	-- Refusals (§9): a shop row is never a button that silently does nothing.
+	shortfallFormat = "NOT ENOUGH — %d C SHORT",
+	ownedFormat = "ALREADY OWNED — %s",
+	unknownFormat = "NOT FOR SALE — %s",
+}
+
+-- §9 shop rows: the sticky cost-vs-cash comparison, plus the measured effect of the item so
+-- the tank reads as the key to depth (§6.3). Effect strings are built from RodConfig /
+-- GearConfig at read time — no rating is copied into this file.
+EconomyConfig.ShopRowLabel = {
+	affordableFormat = "%d C", -- params: cost
+	shortfallFormat = "%d C — NEED %d MORE", -- params: cost, shortfall
+	ownedFormat = "OWNED",
+	gearEffectFormat = "RATING %dm → %dm · AIR %ds", -- params: current rating, new rating, new air
+	rodEffectFormat = "MAX RARITY %s → %s", -- params: current rod cap, new rod cap
+}
 
 return EconomyConfig

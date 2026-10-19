@@ -24,6 +24,7 @@ local Types = require(ReplicatedStorage.DeepTide.Modules.Types)
 local Remotes = require(ReplicatedStorage.DeepTide.Modules.Remotes)
 local DiveConfig = require(ReplicatedStorage.DeepTide.Config.DiveConfig)
 local ZoneConfig = require(ReplicatedStorage.DeepTide.Config.ZoneConfig)
+local GearConfig = require(ReplicatedStorage.DeepTide.Config.GearConfig)
 
 local DiveService = Knit.CreateService({
 	Name = "DiveService",
@@ -34,8 +35,27 @@ local airByPlayer: { [Player]: number } = {}
 local ratingHold: { [Player]: number } = {}
 local pushAccumulator = 0
 
+-- The head sits this far above the character's root (the offset Roblox uses for the standard
+-- rigs); a forced ascent places both, because §3.0 measures depth at the head.
+local HEAD_OFFSET_STUDS = 2
+
 local function gearService(): any
 	return Knit.GetService("GearService")
+end
+
+-- Resolved lazily and tolerated when absent: the dive loop drives the world's zone rule, but
+-- the dive maths must still work on its own (the harness boots WorldService with it).
+local cachedWorld: any = nil
+local function worldService(): any?
+	if cachedWorld == nil then
+		local ok, service = pcall(function()
+			return Knit.GetService("WorldService")
+		end)
+		if ok and type(service) == "table" then
+			cachedWorld = service
+		end
+	end
+	return cachedWorld
 end
 
 local function headPosition(player: Player): Vector3?
@@ -119,15 +139,27 @@ end
 
 --- Losing the tank's air: the player is put back at the surface, the reason is named (§9: never a
 --- loss without a reason), and the fish on the line is lost — nothing banked is ever lost (§11).
+---
+--- The rating wall is a *different* loss from a broken line and has to read like one: it prints
+--- `GEAR RATING EXCEEDED — RATING 90m — SURFACED` (the number the HUD is already showing) plus
+--- the tier that opens the deeper water, so the player leaves knowing what to buy. Nothing in
+--- this path may ever say "CAST BROKE" or "LINE TOO WEAK" (§5.4 is the rod's failure, not this).
 function DiveService:ForceSurface(player: Player, kind: string)
 	local position = headPosition(player)
 	if position ~= nil then
 		local character = player.Character
 		local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+		local target = Vector3.new(position.X, DiveConfig.SeaLevelY + DiveConfig.ForceSurfaceHeightStuds, position.Z)
 		if root ~= nil then
-			(root :: BasePart).CFrame = CFrame.new(
-				Vector3.new(position.X, DiveConfig.SeaLevelY + DiveConfig.ForceSurfaceHeightStuds, position.Z)
-			)
+			(root :: BasePart).CFrame = CFrame.new(target)
+		end
+		-- §3.0 reads depth at the head, so the head lands on the surface with the root. Roblox
+		-- welds the head to the root and does this by itself; saying it explicitly keeps the
+		-- readout and the character in agreement everywhere, including in the headless rig, which
+		-- moves the two parts independently.
+		local head = if character ~= nil then character:FindFirstChild("Head") else nil
+		if head ~= nil then
+			(head :: BasePart).CFrame = CFrame.new(target + Vector3.new(0, HEAD_OFFSET_STUDS, 0))
 		end
 	end
 
@@ -135,7 +167,7 @@ function DiveService:ForceSurface(player: Player, kind: string)
 	airByPlayer[player] = self:GetAirCapacity(player)
 	self:_Push(player)
 
-	local message = DiveConfig.ForceSurfaceMessages[kind]
+	local message = self:ForceSurfaceMessage(player, kind)
 	if message ~= nil then
 		Remotes.get("Notify"):FireClient(player, { text = message, seconds = DiveConfig.RatingWarningHoldTime })
 	end
@@ -146,10 +178,50 @@ function DiveService:ForceSurface(player: Player, kind: string)
 	end
 end
 
+--- The cheapest gear tier deeper than what this player is wearing (§6.3/§6.5: the tank comes
+--- first, and it is the answer to this wall). nil when the player already holds the deepest.
+local function nextGearTier(player: Player): Types.GearConfigEntry?
+	local current = gearService():GetGearStats(player)
+	local best: Types.GearConfigEntry? = nil
+	for _, gearId in GearConfig.Order do
+		local gear = GearConfig.Gear[gearId]
+		if gear ~= nil and gear.depthRating > current.depthRating then
+			if best == nil or gear.cost < best.cost then
+				best = gear
+			end
+		end
+	end
+	return best
+end
+
+--- The line a forced ascent prints (§9), built from DiveConfig's formats and — for the rating
+--- case — the player's own gear rating plus the deeper tier's name, rating and cost out of
+--- GearConfig. Every number is read, never typed.
+function DiveService:ForceSurfaceMessage(player: Player, kind: string): string?
+	if kind ~= "rating" then
+		return DiveConfig.ForceSurfaceMessages[kind]
+	end
+
+	local rating = gearService():GetDepthRating(player)
+	local deeper = nextGearTier(player)
+	if deeper == nil then
+		return DiveConfig.ForceSurfaceMessages.rating:format(rating)
+	end
+	return DiveConfig.ForceSurfaceMessages.ratingWithUpgradeFormat:format(
+		rating,
+		string.upper(deeper.name),
+		deeper.depthRating,
+		deeper.cost
+	)
+end
+
 --- §5.4 + §11: at DepthRating + RatingWarningMargin for RatingWarningHoldTime the player is
 --- auto-surfaced with the rating warning. Returns true when the ascent was forced.
 --- The ascent itself must never cost a banked catch (§11).
-function DiveService:EnforceDepthRating(player: Player): boolean
+--- `dt` is the seconds this call stands for; it defaults to one step of the §9 push rate, so the
+--- 1.5 s window is measured in real seconds even if a frame is long.
+function DiveService:EnforceDepthRating(player: Player, dt: number?): boolean
+	local step = dt or (1 / DiveConfig.StatePushHz)
 	local depth = self:GetDepth(player)
 	local limit = gearService():GetDepthRating(player) + DiveConfig.RatingWarningMargin
 
@@ -158,7 +230,7 @@ function DiveService:EnforceDepthRating(player: Player): boolean
 		return false
 	end
 
-	local held = (ratingHold[player] or 0) + 1 / DiveConfig.StatePushHz
+	local held = (ratingHold[player] or 0) + step
 	ratingHold[player] = held
 	if held >= DiveConfig.RatingWarningHoldTime then
 		ratingHold[player] = 0
@@ -193,6 +265,7 @@ end
 
 --- One step of the air clock. Called from Heartbeat at DiveConfig.StatePushHz; the harness calls
 --- it with a fixed dt. `dt` seconds of air per second submerged (§11: exactly 1 s per second).
+--- It also drives §3.1/§3.3's zone-entry rule, so the world needs no second per-player loop.
 function DiveService:_Step(dt: number)
 	for _, player in game:GetService("Players"):GetPlayers() do
 		local submerged = self:IsSubmerged(player)
@@ -211,7 +284,14 @@ function DiveService:_Step(dt: number)
 			self:SetUnderwaterVisuals(player, false)
 		end
 
-		self:EnforceDepthRating(player)
+		self:EnforceDepthRating(player, dt)
+
+		-- §3.1/§3.3/§9: which zone is this player in, and does their gear open it? The world
+		-- owns the rule; the dive loop is merely the clock that asks.
+		local world = worldService()
+		if world ~= nil then
+			world:UpdateZone(player)
+		end
 	end
 
 	pushAccumulator += dt

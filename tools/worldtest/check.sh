@@ -123,11 +123,50 @@ run_fish() {
     "$LUAU" "$out"
 }
 
+# The dock economy suite: §6 (sell, shop, purchases), §5.4/§11 (the depth wall and the zone
+# gate), §1 step 8 (prompt wiring) and the whole loop end to end, with a mock DataStore so a
+# rejoin can be driven for real.
+run_economy() {
+    local out=/tmp/deep-tide-economytest.luau
+    {
+        cat stub.luau
+        configs FishConfig SpawnConfig LandmarkConfig RarityConfig RodConfig GearConfig DiveConfig FightConfig EconomyConfig ZoneConfig
+        echo "__CFG_SOURCES.Types = function()"
+        cat "$REPO/src/shared/Modules/Types.luau"
+        echo "end"
+        cat economy_store.luau
+        echo "__Rng = (function()"
+        cat "$REPO/src/shared/Modules/Rng.luau"
+        echo "end)()"
+        echo "__Tension = (function()"
+        patch "$REPO/src/shared/Modules/Tension.luau"
+        echo "end)()"
+        echo "__Remotes = (function()"
+        cat "$REPO/src/shared/Modules/Remotes.luau"
+        echo "end)()"
+        echo "local WorldService = (function()"
+        patch "$REPO/src/server/Services/WorldService.luau"
+        echo "end)()"
+        echo "local PlayerStoreModule = (function()"
+        patch "$REPO/src/server/Modules/PlayerStore.luau"
+        echo "end)()"
+        for service in PlayerService GearService InventoryService EconomyService ShopService DiveService FishService FishingService; do
+            echo "local $service = (function()"
+            patch "$REPO/src/server/Services/$service.luau"
+            echo "end)()"
+        done
+        cat economy_harness.luau
+    } > "$out"
+    echo "--- dock economy suite (sell / shop / depth / zone / prompts / end-to-end) ---"
+    "$LUAU" "$out"
+}
+
 case "$WHICH" in
     world) run_world ;;
     persist) run_persist ;;
     config) run_config ;;
     fish) run_fish ;;
-    all) run_world; run_persist; run_config; run_fish ;;
-    *) echo "usage: check.sh [world|persist|config|fish|all]" >&2; exit 2 ;;
+    economy) run_economy ;;
+    all) run_world; run_persist; run_config; run_fish; run_economy ;;
+    *) echo "usage: check.sh [world|persist|config|fish|economy|all]" >&2; exit 2 ;;
 esac

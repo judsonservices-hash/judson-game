@@ -38,7 +38,14 @@ DiveConfig.UnderwaterFadeSeconds = 1.5
 DiveConfig.ForceSurfaceHeightStuds = 6
 DiveConfig.ForceSurfaceMessages = {
 	outOfAir = "AIR EMPTY — SURFACED",
-	rating = "GEAR RATING EXCEEDED — SURFACED",
+	-- The rating wall names itself (§2: "DEPTH RATING EXCEEDED — 90m") and names the rating the
+	-- player is wearing, so the number on the HUD is the number in the line. Being surfaced by
+	-- your own gear is NOT a §5.4 rod failure: nothing here may read as "LINE TOO WEAK". The
+	-- number is GearConfig.Gear[x].depthRating for whatever the player has equipped.
+	rating = "GEAR RATING EXCEEDED — RATING %dm — SURFACED",
+	-- The same line with the next step attached (§9), for the case where a deeper tier exists:
+	-- parameters are that tier's printed name, rating and cost, read from GearConfig.
+	ratingWithUpgradeFormat = "GEAR RATING EXCEEDED — RATING %dm — SURFACED · %s %dm (%d C)",
 }
 
 -- How often the server pushes `DiveStateChanged` to a player (§9). Not per frame: the air number

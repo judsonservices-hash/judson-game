@@ -174,12 +174,59 @@ function GearService:OpensZone(player: Player, zoneId: string): boolean
 	return self:GetDepthRating(player) >= zone.requiredDepthRating
 end
 
+--- §3.1 / §3.3 / §6.3: the zone-entry rule's other half. Answers "does the player's gear open
+--- this zone, and if not, what does?" — the cheapest gear tier whose DepthRating reaches the
+--- zone's requirement, named and priced from GearConfig (never from the world or the UI), so
+--- the refusal the player reads is a shopping list (§9).
+function GearService:GetZoneAccess(player: Player, zoneId: string): { [string]: any }
+	local ZoneConfig = require(ReplicatedStorage.DeepTide.Config.ZoneConfig)
+	local zone = ZoneConfig.Zones[zoneId]
+	local rating = self:GetDepthRating(player)
+	if zone == nil then
+		return { opens = true, rating = rating, required = 0 }
+	end
+
+	local required = zone.requiredDepthRating
+	local key: Types.GearConfigEntry? = nil
+	for _, gearId in GearConfig.Order do
+		local gear = GearConfig.Gear[gearId]
+		if gear ~= nil and gear.depthRating >= required and (key == nil or gear.cost < key.cost) then
+			key = gear
+		end
+	end
+
+	return {
+		opens = rating >= required,
+		rating = rating,
+		required = required,
+		gearId = if key ~= nil then key.id else nil,
+		gearName = if key ~= nil then key.name else nil,
+		gearCost = if key ~= nil then key.cost else nil,
+		gearRating = if key ~= nil then key.depthRating else nil,
+	}
+end
+
 function GearService:Owns(player: Player, itemId: string): boolean
 	local data = playerService():GetData(player)
 	if data == nil then
 		return false
 	end
 	return data.equippedRodId == itemId or data.equippedGearId == itemId or isGearOwned(data, itemId)
+end
+
+--- §1 step 2: the Rod Rack's verb — take the starter rod and say so in the §9 voice. Kept as a
+--- method (rather than wired here) so WorldService:WirePrompts owns every prompt's connection
+--- and no prompt can end up with two handlers, or none.
+function GearService:OnRodRackTriggered(player: Player)
+	local took = self:TakeStarterRod(player)
+	self:SyncAttributes(player)
+	if took then
+		local rod = self:GetRodStats(player)
+		Remotes.get("Notify"):FireClient(player, {
+			text = RodConfig.EquippedMessageFormat:format(string.upper(rod.name)),
+			seconds = RodConfig.EquippedMessageSeconds,
+		})
+	end
 end
 
 -- Client surface -------------------------------------------------------------
@@ -207,23 +254,8 @@ function GearService:KnitInit()
 end
 
 function GearService:KnitStart()
-	-- §1 step 2: the Rod Rack's ProximityPrompt already exists (WorldService builds it);
-	-- its verb is the rod. `Triggered` fires on the server, which is where the handout happens.
-	local world = Knit.GetService("WorldService")
-	local prompt = world:GetPrompt("RodRack")
-	if prompt ~= nil then
-		prompt.Triggered:Connect(function(player)
-			local took = self:TakeStarterRod(player)
-			self:SyncAttributes(player)
-			if took then
-				local rod = self:GetRodStats(player)
-				Remotes.get("Notify"):FireClient(player, {
-					text = RodConfig.EquippedMessageFormat:format(string.upper(rod.name)),
-					seconds = RodConfig.EquippedMessageSeconds,
-				})
-			end
-		end)
-	end
+	-- §1 step 2: the Rod Rack's ProximityPrompt is connected by WorldService:WirePrompts (which
+	-- owns every prompt host). The verb itself is OnRodRackTriggered, above.
 end
 
 return GearService
