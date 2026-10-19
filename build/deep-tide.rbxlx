@@ -18491,8 +18491,18 @@ function DiveService:ForceSurface(player: Player, kind: string)
         local character = player.Character
         local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
         local target = Vector3.new(position.X, DiveConfig.SeaLevelY + DiveConfig.ForceSurfaceHeightStuds, position.Z)
+        -- The ascent moves the player; it must not turn them. `CFrame.new(target)` carries the
+        -- identity rotation, so writing it straight to the root snapped the avatar's facing to
+        -- world -Z — a 180 deg flip for a diver swimming +Z, which is the direction the whole loop
+        -- faces — and the swim/run controller then visibly swung the rig back. Keep the yaw the
+        -- character already has (the root's LookVector is what a rig reports, in game and in rigs).
+        local yaw = 0
         if root ~= nil then
-            (root :: BasePart).CFrame = CFrame.new(target)
+            local facing = (root :: BasePart).CFrame.LookVector
+            yaw = math.atan2(-facing.X, -facing.Z)
+        end
+        if root ~= nil then
+            (root :: BasePart).CFrame = CFrame.new(target) * CFrame.Angles(0, yaw, 0)
         end
         -- §3.0 reads depth at the head, so the head lands on the surface with the root. Roblox
         -- welds the head to the root and does this by itself; saying it explicitly keeps the
@@ -18501,6 +18511,7 @@ function DiveService:ForceSurface(player: Player, kind: string)
         local head = if character ~= nil then character:FindFirstChild("Head") else nil
         if head ~= nil then
             (head :: BasePart).CFrame = CFrame.new(target + Vector3.new(0, HEAD_OFFSET_STUDS, 0))
+                * CFrame.Angles(0, yaw, 0)
         end
     end
 
@@ -22079,13 +22090,16 @@ return VisualService
         belongs to the owning service; what a zone *needs* belongs here, because Zones are here.
       * Nothing is placed outside ZoneConfig.BuildZone (§3.0) except the water volume itself.
 
-    Known GDD deviations, all commented at the point they happen:
-      * §3.2 L1's "-12 deg ramp" (see RAMP_DEGREES) — the angle and the Z 8 water entry cannot
-        both hold; the water entry wins (the DIVE HERE marker sits there).
-      * §3.2 L2's "Cone primitives" and §3.4 S4's cones — Roblox has no cone Part and
-        Appendix A forbids SpecialMesh, so tapered cylinder stacks stand in.
-      * §3.4 S2's "3-stud Neon speck" — S2's budget is 7 (the dens), so the speck is a
-        PointLight on each den instead of an eighth part.
+	Known GDD deviations, all commented at the point they happen:
+	  * §3.2 L1's "-12 deg ramp" (see RAMP_DEGREES) — the angle and the Z 8 water entry cannot
+		both hold; the water entry wins (the DIVE HERE marker sits there).
+	  * §3.2 L2's "Cone primitives" and §3.4 S4's cones — Roblox has no cone Part and
+		Appendix A forbids SpecialMesh, so tapered cylinder stacks stand in.
+	  * §3.4 S2's "3-stud Neon speck" — S2's budget is 7 (the dens), so the speck is a
+		PointLight on each den instead of an eighth part.
+      * §3.2 L1's light tower "at (0, 20, -22)" — see buildL1Dock: §3.2 also prints the player
+        spawn at (0, 8, -20), and the tower's base plane and footprint both land exactly there,
+        so the printed pair creates the avatar inside the tower. The tower moves to (20, 20, -22).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22184,6 +22198,12 @@ local RAMP_WIDTH = 16
 local DECK_TOP_Y = 7
 local DECK_LIP_Z = 5
 
+-- §11 step 1: the player is *created* standing on the SpawnLocation, so the volume above that pad
+-- has to be empty of solid geometry. A rig is ~5 studs of body; 6 studs of clearance above the
+-- pad's top surface is the character's own column, with the pad's whole 12 x 12 footprint kept
+-- clear as well — a spawn pad is a landing area, not a shelf. See ValidateSpawnVolume.
+local SPAWN_CLEARANCE_STUDS = 6
+
 -- §1 steps 2, 3 and 8: which service owns each prompt host's verb. Every host in
 -- LandmarkConfig.PromptHosts must appear here or carry a `hint`; UnwiredPromptIds() reports
 -- anything that would be left dangling, because a prompt that does nothing is worse than no
@@ -22224,6 +22244,69 @@ end
 -- A part resting on a surface at `topY`, with `embed` of its height sunk into it.
 local function restingY(topY: number, height: number, embed: number?): number
 	return topY + height / 2 - height * (embed or 0.35)
+end
+
+-- The axis-aligned box a rotated box occupies: half the part's Size projected onto each world axis
+-- through the CFrame's own axes, which is the exact OBB -> AABB bound. Used only by the layout
+-- validation below, where two boxes overlapping is the question.
+local function boxBounds(cf: CFrame, size: Vector3): (Vector3, Vector3)
+	local x = cf.RightVector * (size.X / 2)
+	local y = cf.UpVector * (size.Y / 2)
+	local z = cf.LookVector * (size.Z / 2)
+	local half = Vector3.new(
+		math.abs(x.X) + math.abs(y.X) + math.abs(z.X),
+		math.abs(x.Y) + math.abs(y.Y) + math.abs(z.Y),
+		math.abs(x.Z) + math.abs(y.Z) + math.abs(z.Z)
+	)
+	local centre = cf.Position
+	return centre - half, centre + half
+end
+
+local function boxesOverlap(aMin: Vector3, aMax: Vector3, bMin: Vector3, bMax: Vector3): boolean
+	return aMin.X < bMax.X
+		and aMax.X > bMin.X
+		and aMin.Y < bMax.Y
+		and aMax.Y > bMin.Y
+		and aMin.Z < bMax.Z
+		and aMax.Z > bMin.Z
+end
+
+--- The part as the engine will build it: `collide` defaults to the inverse of `decor`.
+local function isCollidable(spec: PartSpec): boolean
+	return if spec.collide ~= nil then spec.collide :: boolean else not spec.decor
+end
+
+-- Everything solid standing in the column the player is created in. This is the one build mistake
+-- that shows up as the avatar itself misbehaving: Roblox does not refuse a character that exists
+-- inside an anchored part — it depenetrates the rig, and a rig being depenetrated reads in game as
+-- the avatar tumbling (or being flung) the instant the place is played. Every world part is
+-- anchored, so dressing reaching into the spawn column is the only way the world can do this.
+-- Returns the offending part names, and the volume it checked, for the report line.
+local function spawnVolumeIntruders(resolved: Layout): ({ string }, Vector3, Vector3)
+	local pad: PartSpec? = nil
+	for _, spec in resolved.parts do
+		if spec.name == LandmarkConfig.WorldPropNames.SpawnLocation then
+			pad = spec
+		end
+	end
+	if pad == nil then
+		return {}, Vector3.new(0, 0, 0), Vector3.new(0, 0, 0)
+	end
+
+	local padMin, padMax = boxBounds(pad.cf, pad.size)
+	local min = Vector3.new(padMin.X, padMax.Y, padMin.Z)
+	local max = Vector3.new(padMax.X, padMax.Y + SPAWN_CLEARANCE_STUDS, padMax.Z)
+
+	local names: { string } = {}
+	for _, spec in resolved.parts do
+		if spec ~= pad and isCollidable(spec) then
+			local partMin, partMax = boxBounds(spec.cf, spec.size)
+			if boxesOverlap(partMin, partMax, min, max) then
+				table.insert(names, spec.name)
+			end
+		end
+	end
+	return names, min, max
 end
 
 local function zonePath(zoneId: string, landmarkId: string): string
@@ -22467,11 +22550,20 @@ local function buildL1Dock(parts: { PartSpec })
 		color = DOCK_WOOD,
 	})
 
-	add(parts, parent, "L1_LightTower", Vector3.new(0, 20, -22), Vector3.new(4, 24, 4), {
+	-- §3.2 L1 prints this tower at (0, 20, -22) *and* prints the player spawn at (0, 8, -20), and the
+	-- two cannot both hold: the tower is 4 x 4, so at (0, -22) its footprint runs X -2..2, Z -24..-20
+	-- — its north face is exactly the spawn point's Z, and its base (Y 8) is exactly the pad's top
+	-- surface (Y 8). Built as printed, the avatar is created with half of its body inside a 24-stud
+	-- anchored wooden pillar and its feet on the pillar's base plane. Roblox depenetrates a character
+	-- that exists inside geometry, which is what "the avatar flips when the place is played" is.
+	-- The spawn coordinate is the ratified one (§11 step 1, ZoneConfig.InteractionPoints.PlayerSpawn,
+	-- asserted in Tools/worldtest), so the dressing moves instead: same dock, same height, same
+	-- corner of the deck — 20 studs east of the spawn pad, clear of its 12 x 12 footprint.
+	add(parts, parent, "L1_LightTower", Vector3.new(20, 20, -22), Vector3.new(4, 24, 4), {
 		material = Enum.Material.Wood,
 		color = DOCK_WOOD_DARK,
 	})
-	add(parts, parent, "L1_Beacon", Vector3.new(0, 32, -22), Vector3.new(2, 2, 2), {
+	add(parts, parent, "L1_Beacon", Vector3.new(20, 32, -22), Vector3.new(2, 2, 2), {
 		material = Enum.Material.Neon,
 		color = WARM_NEON,
 		decor = true,
@@ -23447,6 +23539,27 @@ function WorldService:ValidateLayout(layout: Layout?): { string }
 				table.insert(problems, ("%s is placed outside ZoneConfig.BuildZone"):format(spec.name))
 			end
 		end
+	end
+	-- §11 step 1: the player is created standing on the pad, so nothing solid may stand in that
+	-- column. This is a *spawn* rule, not a scenery rule: a character that exists inside an
+	-- anchored part is not refused by Roblox, it is depenetrated — which is what an avatar that
+	-- tumbles or flips the moment the place is played actually is. The pad's own footprint is
+	-- the volume, and the pad is the only part exempt from it.
+	local intruders, spawnMin, spawnMax = spawnVolumeIntruders(resolved)
+	if #intruders > 0 then
+		table.insert(
+			problems,
+			("%s: %d part(s) stand in the player's spawn volume X %.1f..%.1f, Y %.1f..%.1f, Z %.1f..%.1f"):format(
+				table.concat(intruders, ", "),
+				#intruders,
+				spawnMin.X,
+				spawnMax.X,
+				spawnMin.Y,
+				spawnMax.Y,
+				spawnMin.Z,
+				spawnMax.Z
+			)
+		)
 	end
 
 	-- §Appendix A: a scripter must be able to find any world part by name, so names have to
